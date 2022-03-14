@@ -27,7 +27,10 @@ def drop_info_with_name(info, name):
     ret_info = {}
     keep_indices = [i for i, x in enumerate(info['name']) if x != name]
     for key in info.keys():
-        ret_info[key] = info[key][keep_indices]
+        try:
+            ret_info[key] = info[key][keep_indices]
+        except:
+            print('line for debug')
     return ret_info
 
 

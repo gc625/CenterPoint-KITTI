@@ -81,7 +81,7 @@ class inHouseDataset(DatasetTemplate):
     def get_calib(self, idx):
         calib_file = self.root_split_path / 'calib' / ('%s.txt' % idx)
         assert calib_file.exists()
-        return calibration_kitti.Calibration(calib_file)
+        return calibration_kitti.Calibration(calib_file, mode='inhouse')
 
     def get_road_plane(self, idx):
         plane_file = self.root_split_path / 'planes' / ('%s.txt' % idx)
@@ -149,7 +149,7 @@ class inHouseDataset(DatasetTemplate):
                 annotations['truncated'] = np.array([obj.truncation for obj in obj_list])
                 annotations['occluded'] = np.array([obj.occlusion for obj in obj_list])
                 annotations['alpha'] = np.array([obj.alpha for obj in obj_list])
-                # empty bbox
+                # fake bbox
                 annotations['bbox'] = np.concatenate([np.zeros([1, 4]) for i in range(len(obj_list))], axis=0)
                 annotations['dimensions'] = np.array([[obj.l, obj.h, obj.w] for obj in obj_list])  # lhw(camera) format
                 annotations['location'] = np.concatenate([obj.loc.reshape(1, 3) for obj in obj_list], axis=0)
@@ -349,7 +349,8 @@ class inHouseDataset(DatasetTemplate):
 
         info = copy.deepcopy(self.kitti_infos[index])
 
-        sample_idx = info['point_cloud']['lidar_idx']
+        # sample_idx = info['point_cloud']['lidar_idx']
+        sample_idx = info['timestamp']
 
         points = self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)

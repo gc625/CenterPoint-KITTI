@@ -40,8 +40,8 @@ def inside_range(l, classname, diff) -> bool:
         [[0, 48], [-20.0, 20.0], [-1.5, 1.5]],
         [[-1e6, 1e6], [-1e6, 1e6], [-1e6, 1e6]],
     ])
-    if classname == 'car' or classname == 'truck': lims = car_range[diff]
-    elif classname == 'pedestrian' or classname == 'cyclist': lims = ped_range[diff]
+    if classname == 'Car' or classname == 'Truck': lims = car_range[diff]
+    elif classname == 'Pedestrian' or classname == 'Cyclist': lims = ped_range[diff]
     else: raise ValueError(f'unknown class {classname}')
     return l[0] >= lims[0, 0] and l[0] <= lims[0, 1] and \
         l[1] >= lims[1, 0] and l[1] <= lims[1, 1] and \
@@ -57,8 +57,8 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
         gt_name = gt_anno['name'][i].lower()
         valid_class = -1
         if gt_name == current_class: valid_class = 1
-        elif current_class == 'pedestrian' and 'person_sitting' == gt_name: valid_class = 0
-        elif current_class == 'car' and 'van' == gt_name: valid_class = 0
+        elif current_class == 'Pedestrian' and 'person_sitting' == gt_name: valid_class = 0
+        elif current_class == 'Car' and 'van' == gt_name: valid_class = 0
         else: valid_class = -1
         ignore = not inside_range(gt_anno['location'][i], current_class, difficulty)
         if valid_class == 1 and not ignore:
@@ -605,33 +605,33 @@ def inhouse_eval(gt_annos,
     """
     overlaps = {
         'strict': {
-            'car':          0.7,
-            'cyclist':      0.5,
-            'pedestrian':   0.5,
-            'truck':        0.7,
+            'Car':          0.7,
+            'Cyclist':      0.5,
+            'Pedestrian':   0.5,
+            'Truck':        0.7,
         },
         'loose': {
-            'car':          0.5,
-            'cyclist':      0.25,
-            'pedestrian':   0.25,
-            'truck':        0.5,
+            'Car':          0.5,
+            'Cyclist':      0.25,
+            'Pedestrian':   0.25,
+            'Truck':        0.5,
         },
         'veryloose': {
-            'car':          0.25,
-            'cyclist':      0.125,
-            'pedestrian':   0.125,
-            'truck':        0.25,
+            'Car':          0.25,
+            'Cyclist':      0.125,
+            'Pedestrian':   0.125,
+            'Truck':        0.25,
         },
     }
     if not isinstance(current_classes, (list, tuple)):
         current_classes = [current_classes]
     result = ''
 
-    mAP3d = do_eval(gt_annos, dt_annos, current_classes, overlaps)
+    mAP3d = do_eval_inhouse(gt_annos, dt_annos, current_classes, overlaps)
 
     ret_dict = {}
     difficulties = ['close', 'medium', 'far', 'no_filter']
-    result += f'                      {difficulties[0]:<6}\t {difficulties[1]:<6}\t {difficulties[2]:<6}\t {difficulties[3]:<6}\n'
+    result += f'\n                      {difficulties[0]:<6}\t {difficulties[1]:<6}\t {difficulties[2]:<6}\t {difficulties[3]:<6}\n'
     for m, current_class in enumerate(current_classes):
         # mAP threshold array: [num_minoverlap, metric, class]
         # mAP result: [num_class, num_minoverlap]
@@ -665,8 +665,9 @@ def do_eval(gt_annos,
             compute_aos=False,
             PR_detail_dict=None):
     # min_overlaps: [num_minoverlap, metric, num_class]
-    difficultys = [0, 1, 2]
-    ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 0,
+    difficultys = [0, 1, 2, 3]
+    # difficultys = [-1]
+    ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 1,
                      min_overlaps, compute_aos)
     # ret: [num_class, num_diff, num_minoverlap, num_sample_points]
     mAP_bbox = get_mAP(ret["precision"])

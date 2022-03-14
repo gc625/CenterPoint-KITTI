@@ -19,11 +19,23 @@ def get_calib_from_file(calib_file):
             'R0': R0.reshape(3, 3),
             'Tr_velo2cam': Tr_velo_to_cam.reshape(3, 4)}
 
+def get_fake_calib():
+    P2 = np.eye(3, 4)
+    P3 = np.eye(3, 4)
+    R0 = np.eye(3)
+    Tr_velo_to_cam = np.eye(3,4)
+    return {'P2': P2.reshape(3, 4),
+            'P3': P3.reshape(3, 4),
+            'R0': R0.reshape(3, 3),
+            'Tr_velo2cam': Tr_velo_to_cam.reshape(3, 4)}
 
 class Calibration(object):
-    def __init__(self, calib_file):
+    def __init__(self, calib_file, mode='kitti'):
         if not isinstance(calib_file, dict):
-            calib = get_calib_from_file(calib_file)
+            if mode == 'kitti':
+                calib = get_calib_from_file(calib_file)
+            else:
+                calib = get_fake_calib()
         else:
             calib = calib_file
 
