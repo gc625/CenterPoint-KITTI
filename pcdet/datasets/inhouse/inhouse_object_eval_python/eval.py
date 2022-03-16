@@ -1,3 +1,4 @@
+from ast import Raise
 import io as sysio
 import gc
 import numba
@@ -29,19 +30,21 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
 
 def inside_range(l, classname, diff) -> bool:
     car_range = np.array([
-        [[0, 25.0], [-18, 18], [-1.0, 1.5]],
-        [[0, 45.0], [-27, 27], [-1.5, 1.5]],
-        [[0, 70.4], [-40, 40], [-2, 2]],
+        [[0, 25.0], [-18, 18], [-3.0, 3]],
+        [[0, 45.0], [-27, 27], [-3, 3]],
+        [[0, 70.4], [-40, 40], [-3, 3]],
         [[-1e6, 1e6], [-1e6, 1e6], [-1e6, 1e6]],
     ])
     ped_range = np.array([
-        [[0, 20], [-9.0, 9.0], [-1.0, 1.5]],
-        [[0, 32], [-13.5, 13.5], [-1.5, 1.5]],
-        [[0, 48], [-20.0, 20.0], [-1.5, 1.5]],
+        [[0, 20], [-9.0, 9.0], [-1.0, 3]],
+        [[0, 32], [-13.5, 13.5], [-1.5, 3]],
+        [[0, 48], [-20.0, 20.0], [-1.5, 3]],
         [[-1e6, 1e6], [-1e6, 1e6], [-1e6, 1e6]],
     ])
-    if classname == 'Car' or classname == 'Truck': lims = car_range[diff]
-    elif classname == 'Pedestrian' or classname == 'Cyclist': lims = ped_range[diff]
+    if classname == 'Car' or classname == 'Truck': 
+        lims = car_range[diff]
+    elif classname == 'Pedestrian' or classname == 'Cyclist': 
+        lims = ped_range[diff]
     else: raise ValueError(f'unknown class {classname}')
     return l[0] >= lims[0, 0] and l[0] <= lims[0, 1] and \
         l[1] >= lims[1, 0] and l[1] <= lims[1, 1] and \
@@ -56,9 +59,12 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
     for i in range(num_gt):
         gt_name = gt_anno['name'][i].lower()
         valid_class = -1
-        if gt_name == current_class: valid_class = 1
-        elif current_class == 'Pedestrian' and 'person_sitting' == gt_name: valid_class = 0
-        elif current_class == 'Car' and 'van' == gt_name: valid_class = 0
+        if gt_name == current_class.lower(): 
+            valid_class = 1
+        elif current_class == 'Pedestrian' and 'person_sitting' == gt_name: 
+            valid_class = 0
+        elif current_class == 'Car' and 'van' == gt_name: 
+            valid_class = 0
         else: valid_class = -1
         ignore = not inside_range(gt_anno['location'][i], current_class, difficulty)
         if valid_class == 1 and not ignore:
@@ -72,10 +78,13 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty):
             dc_bboxes.append(gt_anno['bbox'][i])
 
     for i in range(num_dt):
-        if dt_anno['name'][i].lower() == current_class: valid_class = 1
+        if dt_anno['name'][i].lower() == current_class.lower(): 
+            valid_class = 1
         else: valid_class = -1
-        if not inside_range(dt_anno['location'][i], current_class, difficulty): ignored_dt.append(1)
-        elif valid_class == 1: ignored_dt.append(0)
+        if not inside_range(dt_anno['location'][i], current_class, difficulty): 
+            ignored_dt.append(1)
+        elif valid_class == 1: 
+            ignored_dt.append(0)
         else: ignored_dt.append(-1)
 
     return num_valid_gt, ignored_gt, ignored_dt, dc_bboxes

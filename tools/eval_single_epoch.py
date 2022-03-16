@@ -154,29 +154,45 @@ def main():
         optimizer, total_iters_each_epoch=len(train_loader), total_epochs=args.epochs,
         last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
     )
+    # split the train eval into several cycles
+    # eval_interval = 10
+    # cycle_num = int(float(args.epochs) / eval_interval + 0.5) # ceiling
+    # start_cycle = start_epoch // eval_interval
+    # cur_epoch = start_epoch
+    # for i in range(start_cycle, cycle_num):
+    #     if i == cycle_num - 1:
+    #         train_start_epoch = i * eval_interval
+    #         train_end_epoch = args.epochs
+    #     else:
+    #         train_start_epoch = cur_epoch
+    #         train_end_epoch = i * eval_interval
+    #         cur_epoch = train_end_epoch
+        
+
+
 
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    train_model(
-        model,
-        optimizer,
-        train_loader,
-        model_func=model_fn_decorator(),
-        lr_scheduler=lr_scheduler,
-        optim_cfg=cfg.OPTIMIZATION,
-        start_epoch=start_epoch,
-        total_epochs=args.epochs,
-        start_iter=it,
-        rank=cfg.LOCAL_RANK,
-        tb_log=tb_log,
-        ckpt_save_dir=ckpt_dir,
-        train_sampler=train_sampler,
-        lr_warmup_scheduler=lr_warmup_scheduler,
-        ckpt_save_interval=args.ckpt_save_interval,
-        max_ckpt_save_num=args.max_ckpt_save_num,
-        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch
-    )
+    # train_model(
+    #     model,
+    #     optimizer,
+    #     train_loader,
+    #     model_func=model_fn_decorator(),
+    #     lr_scheduler=lr_scheduler,
+    #     optim_cfg=cfg.OPTIMIZATION,
+    #     start_epoch=start_epoch,
+    #     total_epochs=args.epochs,
+    #     start_iter=it,
+    #     rank=cfg.LOCAL_RANK,
+    #     tb_log=tb_log,
+    #     ckpt_save_dir=ckpt_dir,
+    #     train_sampler=train_sampler,
+    #     lr_warmup_scheduler=lr_warmup_scheduler,
+    #     ckpt_save_interval=args.ckpt_save_interval,
+    #     max_ckpt_save_num=args.max_ckpt_save_num,
+    #     merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch
+    # )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
@@ -191,13 +207,14 @@ def main():
     )
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
+    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs)
+    # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
-    repeat_eval_ckpt(
-        model.module if dist_train else model,
-        test_loader, args, eval_output_dir, logger, ckpt_dir,
-        dist_test=dist_train
-    )
+    # repeat_eval_ckpt(
+    #     model.module if dist_train else model,
+    #     test_loader, args, eval_output_dir, logger, ckpt_dir,
+    #     dist_test=dist_train
+    # )
     logger.info('**********************End evaluation %s/%s(%s)**********************' %
                 (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
 

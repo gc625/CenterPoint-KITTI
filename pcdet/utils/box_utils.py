@@ -148,6 +148,13 @@ def enlarge_box3d(boxes3d, extra_width=(0, 0, 0)):
     large_boxes3d[:, 3:6] += boxes3d.new_tensor(extra_width)[None, :]
     return large_boxes3d
 
+def inhouse_bbx_conversion(boxes3d_lidar):
+    xyz_lidar = boxes3d_lidar[:, 0:3]
+    l, w, h, r = boxes3d_lidar[:, 3:4], boxes3d_lidar[:, 4:5], boxes3d_lidar[:, 5:6], boxes3d_lidar[:, 6:7]
+
+    xyz_lidar[:, 2] -= h.reshape(-1) / 2
+    r = -r - np.pi / 2
+    return np.concatenate([xyz_lidar, l, h, w, r], axis=-1)
 
 def boxes3d_lidar_to_kitti_camera(boxes3d_lidar, calib):
     """

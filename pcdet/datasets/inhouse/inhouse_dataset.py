@@ -283,9 +283,10 @@ class inHouseDataset(DatasetTemplate):
             if pred_scores.shape[0] == 0:
                 return pred_dict
 
-            calib = batch_dict['calib'][batch_index]
-            image_shape = batch_dict['image_shape'][batch_index]
-            pred_boxes_camera = box_utils.boxes3d_lidar_to_kitti_camera(pred_boxes, calib)
+            # calib = batch_dict['calib'][batch_index] # don't care
+            # image_shape = batch_dict['image_shape'][batch_index]
+            # pred_boxes_camera = box_utils.boxes3d_lidar_to_kitti_camera(pred_boxes, calib)
+            pred_boxes_camera = box_utils.inhouse_bbx_conversion(pred_boxes)
 
             pred_dict['name'] = np.array(class_names)[pred_labels - 1]
             pred_dict['alpha'] = -np.arctan2(-pred_boxes[:, 1], pred_boxes[:, 0]) + pred_boxes_camera[:, 6]
@@ -318,6 +319,7 @@ class inHouseDataset(DatasetTemplate):
                         print('%s -1 -1 %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f %.4f'
                               % (single_pred_dict['name'][idx], single_pred_dict['alpha'][idx],
                                 #  bbox[idx][0], bbox[idx][1], bbox[idx][2], bbox[idx][3],
+                                0, 0, 0, 0,
                                  dims[idx][1], dims[idx][2], dims[idx][0], loc[idx][0],
                                  loc[idx][1], loc[idx][2], single_pred_dict['rotation_y'][idx],
                                  single_pred_dict['score'][idx]), file=f)
