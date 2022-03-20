@@ -23,13 +23,13 @@ from train_utils.train_utils import train_model
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/centerpoint_server.yaml', help='specify the config for training')
+    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/OpenPCDet/tools/cfgs/inhouse_models/centerpoint_server.yaml', help='specify the config for training')
 
     parser.add_argument('--batch_size', type=int, default=8, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=1, required=False, help='number of epochs to train for')
     parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
-    parser.add_argument('--extra_tag', type=str, default='server_debug', help='extra tag for this experiment')
-    parser.add_argument('--ckpt', type=str, default='/root/dj/code/CenterPoint-KITTI/output/centerpoint_server/server_debug/ckpt/checkpoint_epoch_1.pth', help='checkpoint to start from')
+    parser.add_argument('--extra_tag', type=str, default='debug', help='extra tag for this experiment')
+    parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
     parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
@@ -45,6 +45,7 @@ def parse_config():
     parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--save_to_file', default=False, help='')
+    parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
 
     args = parser.parse_args()
 

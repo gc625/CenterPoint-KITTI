@@ -1,30 +1,46 @@
 CLASS_NAMES: ['Car', 'Pedestrian', 'Cyclist']
 
 DATA_CONFIG: 
-    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/inhouse_dataset_new.yaml
+    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/inhouse_dataset_radar.yaml
+    DATA_PROCESSOR:
+        - NAME: mask_points_and_boxes_outside_range
+          REMOVE_OUTSIDE_BOXES: True
 
+        - NAME: shuffle_points
+          SHUFFLE_ENABLED: {
+            'train': True,
+            'test': False
+          }
+
+        - NAME: transform_points_to_voxels
+          VOXEL_SIZE: [0.16, 0.16, 4]
+          MAX_POINTS_PER_VOXEL: 32
+          MAX_NUMBER_OF_VOXELS: {
+            'train': 16000,
+            'test': 40000
+          }
 
 MODEL:
     NAME: CenterPoint
 
     VFE:
-        NAME: MeanVFE
-
-    BACKBONE_3D:
-        NAME: VoxelBackBone8x
+        NAME: PillarVFE
+        WITH_DISTANCE: False
+        USE_ABSLOTE_XYZ: True
+        USE_NORM: True
+        NUM_FILTERS: [64]
 
     MAP_TO_BEV:
-        NAME: HeightCompression
-        NUM_BEV_FEATURES: 256
+        NAME: PointPillarScatter
+        NUM_BEV_FEATURES: 64
 
     BACKBONE_2D:
         NAME: BaseBEVBackbone
-
-        LAYER_NUMS: [5]
-        LAYER_STRIDES: [1]
-        NUM_FILTERS: [128]
-        UPSAMPLE_STRIDES: [2]
-        NUM_UPSAMPLE_FILTERS: [256]
+        LAYER_NUMS: [ 3, 5, 5 ]
+        LAYER_STRIDES: [ 1, 2, 2 ]
+        NUM_FILTERS: [ 64, 128, 256 ]
+        UPSAMPLE_STRIDES: [ 1, 2, 4 ]
+        NUM_UPSAMPLE_FILTERS: [ 128, 128, 128 ]
 
     DENSE_HEAD:
         NAME: CenterHead
@@ -34,7 +50,7 @@ MODEL:
 
         TARGET_ASSIGNER_CONFIG:
             MAX_OBJS: 100
-            VOXEL_SIZE: [0.05, 0.05, 0.1]
+            VOXEL_SIZE: [0.16, 0.16, 4]
             OUT_SIZE_FACTOR: 4 
             GAUSSIAN_OVERLAP: 0.1
             MIN_RADIUS: 2

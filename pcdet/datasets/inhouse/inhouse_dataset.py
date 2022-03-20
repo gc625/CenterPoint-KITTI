@@ -64,7 +64,18 @@ class inHouseDataset(DatasetTemplate):
     def get_lidar(self, idx):
         lidar_file = self.root_split_path / 'lidar' / ('%s.bin' % idx)
         assert lidar_file.exists()
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        aug_config_list = self.dataset_cfg.DATA_AUGMENTOR.AUG_CONFIG_LIST
+        for cfg in aug_config_list:
+            if cfg.NAME == 'gt_sampling':
+                feature_num = cfg.NUM_POINT_FEATURES
+                break
+
+        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, feature_num)
+
+    # this function will replace the get_lidar in the future
+    def get_pcd(self, idx):
+        pass
+
 
     # def get_image_shape(self, idx):
     #     img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)

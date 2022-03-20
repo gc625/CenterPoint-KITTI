@@ -660,7 +660,7 @@ def inhouse_eval(gt_annos,
         if mAP3d is not None:
             mAP3d = mAP3d.mean(axis=0)
             for s, strictness in enumerate(overlaps.keys()):
-                result += '3d   AP {: <12}: {:.3f}\t {:.3f}\t {:.3f}\t {:.3f}\n'.format("(" + strictness + ")\n", *mAP3d[:, s])
+                result += '3d   AP {: <12}: {:.3f}\t {:.3f}\t {:.3f}\t {:.3f}\n'.format("(" + strictness + ")", *mAP3d[:, s])
                 # for logger
                 for idx, diff in enumerate(difficulties):
                     ret_dict[f'KITTI/overall_3D_{diff}_{strictness}'] = mAP3d[idx, s]
