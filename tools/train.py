@@ -25,9 +25,9 @@ def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
     parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/pointrcnn_iou_radar.yaml', help='specify the config for training')
 
-    parser.add_argument('--batch_size', type=int, default=1, required=False, help='batch size for training')
-    parser.add_argument('--epochs', type=int, default=3, required=False, help='number of epochs to train for')
-    parser.add_argument('--workers', type=int, default=1, help='number of workers for dataloader')
+    parser.add_argument('--batch_size', type=int, default=8, required=False, help='batch size for training')
+    parser.add_argument('--epochs', type=int, default=1, required=False, help='number of epochs to train for')
+    parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
     parser.add_argument('--extra_tag', type=str, default='debug_new', help='extra tag for this experiment')
     parser.add_argument('--ckpt', type=str, default=None, help='checkpoint to start from')
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')

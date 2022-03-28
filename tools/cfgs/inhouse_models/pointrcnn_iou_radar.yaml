@@ -9,10 +9,12 @@ DATA_CONFIG:
             min_num_corners: 8 # the entire bbox should be inside of the range
 
         -   NAME: sample_radar_points
+            MIN_NUM_PTS: 50
             NUM_POINTS: {
                 'train': 512,
                 'test': 512
             }
+
 
         -   NAME: shuffle_points
             SHUFFLE_ENABLED: {

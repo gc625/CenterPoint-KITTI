@@ -160,6 +160,41 @@ def d3_box_overlap(boxes, qboxes, criterion=-1):
     d3_box_overlap_kernel(boxes, qboxes, rinc, criterion)
     return rinc
 
+def d3_box_overlap_lidar(boxes, qboxes):
+    # calculate 3d iou with CPU in lidar coordinate
+    # code adapted from ....ops.iou3d_nms.iou3d_nms_cuda()
+    """
+    Args:
+        boxes: (N, 7) [x, y, z, dx, dy, dz, heading]
+        qboxes: (M, 7) [x, y, z, dx, dy, dz, heading]
+    Returns:
+        ans_iou: (N, M)
+    """
+    assert boxes.shape[1] == qboxes.shape[1] == 7
+
+    # height overlap
+    boxes_a_height_max = (boxes[:, 2] + boxes[:, 5] / 2).reshape(-1, 1)
+    boxes_a_height_min = (boxes[:, 2] - boxes[:, 5] / 2).reshape(-1, 1)
+    boxes_b_height_max = (qboxes[:, 2] + qboxes[:, 5] / 2).reshape(1, -1)
+    boxes_b_height_min = (qboxes[:, 2] - qboxes[:, 5] / 2).reshape(1, -1)
+    # height_min = np.concatenate((boxes_a_height_min, boxes_b_height_min), axis=-1)
+    max_of_min = np.maximum(boxes_a_height_min, boxes_b_height_min)
+    
+    min_of_max = np.minimum(boxes_a_height_max, boxes_b_height_max)
+
+    overlaps_h = np.clip(min_of_max - max_of_min, a_min=0, a_max=np.inf)
+
+    overlaps_bev = rotate_iou_gpu_eval(boxes[:, [0, 1, 3, 4, 6]],
+                               qboxes[:, [0, 1, 3, 4, 6]], 2)
+
+    overlaps_3d = overlaps_bev * overlaps_h
+
+    vol_a = (boxes[:, 3] * boxes[:, 4] * boxes[:, 5]).reshape(-1, 1)
+    vol_b = (qboxes[:, 3] * qboxes[:, 4] * qboxes[:, 5]).reshape(1, -1)
+    
+    iou_3d = overlaps_3d / np.clip(vol_a + vol_b - overlaps_3d, a_min=1e-6, a_max=np.inf)
+    return iou_3d
+    
 
 @numba.jit(nopython=True)
 def compute_statistics_jit(overlaps,
@@ -420,11 +455,66 @@ def calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
 
     return overlaps, parted_overlaps, total_gt_num, total_dt_num
 
+def inhouse_calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
+    """
+    This function calculate iou within the Lidar coordinate. Only used for inhouse dataset!
+    TODO: implement bev evaluation
+    Args:
+        gt_annos: dict, must from get_label_annos() in kitti_common.py
+        dt_annos: dict, must from get_label_annos() in kitti_common.py
+        metric: eval type. 0: bbox, 1: bev, 2: 3d
+        num_parts: int. a parameter for fast calculate algorithm
+    """
+    assert len(gt_annos) == len(dt_annos)
+    total_dt_num = np.stack([len(a["name"]) for a in dt_annos], 0)
+    total_gt_num = np.stack([len(a["name"]) for a in gt_annos], 0)
+    num_examples = len(gt_annos)
+    split_parts = get_split_parts(num_examples, num_parts)
+    parted_overlaps = []
+    example_idx = 0
 
-# def _prepare_data(gt_annos, dt_annos, current_class, difficulty):
-    
-#     return (gt_datas_list, dt_datas_list, ignored_gts, ignored_dets, dontcares,
-#             total_dc_num, total_num_valid_gt)
+    for num_part in split_parts:
+        gt_annos_part = gt_annos[example_idx:example_idx + num_part]
+        dt_annos_part = dt_annos[example_idx:example_idx + num_part]
+        if metric == 0:
+            raise NotImplementedError('iou for image is not implemented yet')
+        elif metric == 1:
+            raise NotImplementedError('iou for bev is not implemented yet')
+        elif metric == 2:
+            loc = np.concatenate([a["location"] for a in gt_annos_part], 0)
+            dims = np.concatenate([a["dimensions"] for a in gt_annos_part], 0)
+            rots = np.concatenate([a["rotation_y"] for a in gt_annos_part], 0)
+            gt_boxes = np.concatenate(
+                [loc, dims, rots[..., np.newaxis]], axis=1)
+            loc = np.concatenate([a["location"] for a in dt_annos_part], 0)
+            dims = np.concatenate([a["dimensions"] for a in dt_annos_part], 0)
+            rots = np.concatenate([a["rotation_y"] for a in dt_annos_part], 0)
+            dt_boxes = np.concatenate(
+                [loc, dims, rots[..., np.newaxis]], axis=1)
+            overlap_part = d3_box_overlap_lidar(gt_boxes, dt_boxes).astype(
+                np.float64)
+        else:
+            raise ValueError("unknown metric")
+        parted_overlaps.append(overlap_part)
+        example_idx += num_part
+    overlaps = []
+    example_idx = 0
+    for j, num_part in enumerate(split_parts):
+        gt_annos_part = gt_annos[example_idx:example_idx + num_part]
+        dt_annos_part = dt_annos[example_idx:example_idx + num_part]
+        gt_num_idx, dt_num_idx = 0, 0
+        for i in range(num_part):
+            gt_box_num = total_gt_num[example_idx + i]
+            dt_box_num = total_dt_num[example_idx + i]
+            overlaps.append(
+                parted_overlaps[j][gt_num_idx:gt_num_idx + gt_box_num,
+                                   dt_num_idx:dt_num_idx + dt_box_num])
+            gt_num_idx += gt_box_num
+            dt_num_idx += dt_box_num
+        example_idx += num_part
+
+    return overlaps, parted_overlaps, total_gt_num, total_dt_num
+
 def _prepare_data(gt_annos, dt_annos, current_class, difficulty):
     gt_datas_list = []
     dt_datas_list = []
@@ -478,7 +568,7 @@ def eval_class(gt_annos,
     num_examples = len(gt_annos)
     split_parts = get_split_parts(num_examples, num_parts)
 
-    rets = calculate_iou_partly(dt_annos, gt_annos, metric, num_parts)
+    rets = inhouse_calculate_iou_partly(dt_annos, gt_annos, metric, num_parts)
     overlaps, parted_overlaps, total_dt_num, total_gt_num = rets
     N_SAMPLE_PTS = 41
     num_minoverlap = len(min_overlaps)

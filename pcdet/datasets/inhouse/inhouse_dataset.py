@@ -51,6 +51,10 @@ class inHouseDataset(DatasetTemplate):
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
+        self.resample_pts_num = 50 # default setting
+        for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
+            if process_cfg.NAME == 'sample_radar_points':
+                self.resample_pts_num = process_cfg.MIN_NUM_PTS
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
 
@@ -423,12 +427,9 @@ class inHouseDataset(DatasetTemplate):
             info = copy.deepcopy(self.kitti_infos[index])
 
             sample_idx = info['timestamp']
-            if sample_idx == 1643180631900:
-                print('the problematic sample is here')
+            # if sample_idx == 1643180292000:
+            #     print('the problematic sample is here')
             points = self.get_pcd(sample_idx)
-            # print('raw points shape = ', points.shape)
-            # if len(points) > 512:
-            #     print('sth is wrong here')
             calib = self.get_calib(sample_idx)
             input_dict = {
                 'points': points,
@@ -475,13 +476,13 @@ class inHouseDataset(DatasetTemplate):
         data_dict = load_item(index)
         pts_num = data_dict['points'].shape[0]
         gt_num = data_dict['gt_boxes'].shape[0]
-        loop_flag = (pts_num < 50) or (gt_num == 0)
+        loop_flag = (pts_num < self.resample_pts_num) or (gt_num == 0)
         while loop_flag:
             new_index = np.random.randint(self.__len__())
             data_dict = load_item(new_index)
             pts_num = data_dict['points'].shape[0]
             gt_num = data_dict['gt_boxes'].shape[0]
-            loop_flag = (pts_num < 50) or (gt_num == 0)
+            loop_flag = (pts_num < self.resample_pts_num) or (gt_num == 0)
         
         return data_dict
 

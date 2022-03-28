@@ -141,16 +141,11 @@ class DatasetTemplate(torch_data.Dataset):
             data_dict['gt_boxes'] = gt_boxes
 
         data_dict = self.point_feature_encoder.forward(data_dict)
-        # print('points shape after encoder = ', data_dict['points'].shape)
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
-        # if data_dict['points'].shape[0] < 50:
-        #     new_index = np.random.randint(self.__len__())
-        #     return self.__getitem__(new_index)
         data_dict.pop('gt_names', None)
-        # if data_dict['points'].shape[0] < 50:
-        #     print('num pts in prepare_data: ', data_dict['points'].shape)
+
         return data_dict
 
     @staticmethod

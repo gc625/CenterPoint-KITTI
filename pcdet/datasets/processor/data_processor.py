@@ -148,7 +148,11 @@ class DataProcessor(object):
         num_points = config.NUM_POINTS[self.mode]
         if num_points == -1:
             return data_dict
+        
+        
         points = data_dict['points']
+        if len(points) < config.MIN_NUM_PTS:
+            return data_dict
         if num_points < len(points):
             # print('sth is wrong here')
             raise RuntimeError('radar points sampling only applies for upsampling')
