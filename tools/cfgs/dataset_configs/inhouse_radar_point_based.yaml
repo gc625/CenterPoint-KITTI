@@ -1,11 +1,11 @@
 DATASET: 'inHouseDataset'
-# DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
-DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
+DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
+# DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
 # DATA_PATH: '/root/data/public/shangqi/radar_test/kitti_format'
 
 # POINT_CLOUD_RANGE: [0, -40, -2, 70.4, 40, 3]
 # some radar points may locate at x < 0
-POINT_CLOUD_RANGE: [-2, -40, -2, 70, 40, 3]
+POINT_CLOUD_RANGE: [0, -40, -2, 70, 40, 3]
 
 DATA_SPLIT: {
     'train': train,
@@ -38,7 +38,7 @@ DATA_AUGMENTOR:
              filter_by_difficulty: [10],
           }
 
-          SAMPLE_GROUPS: ['Car:5']
+          SAMPLE_GROUPS: ['Car:0'] # disable gt sampling
           NUM_POINT_FEATURES: 6
           DATABASE_WITH_FAKELIDAR: False
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
