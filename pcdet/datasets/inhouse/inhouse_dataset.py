@@ -1,5 +1,6 @@
 import copy
 import pickle
+from this import d
 
 import numpy as np
 from skimage import io
@@ -7,7 +8,28 @@ from skimage import io
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_utils, calibration_kitti, common_utils, object3d_kitti
 from ..dataset import DatasetTemplate
+import open3d 
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
+def get_rotation(yaw):
+    # x,y,_ = arr[:3]
+    # yaw = np.arctan(y/x)
+    angle = np.array([0, 0, yaw])
+    r = R.from_euler('XYZ', angle)
+    return r.as_matrix()
+
+def get_bbx_param(obj_info, scale=1.1):
+
+    center = obj_info[:3]
+    extent = obj_info[3:6]
+    angle = -obj_info[6]
+    # center[-1] += 0.5 * extent[-1]
+
+    rot_m = get_rotation(angle)
+    
+    obbx = open3d.geometry.OrientedBoundingBox(center.T, rot_m, extent.T)
+    return obbx
 
 class inHouseDataset(DatasetTemplate):
     def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
@@ -25,7 +47,7 @@ class inHouseDataset(DatasetTemplate):
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
         # self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
         self.root_split_path = self.root_path
-
+        self.train_filter_pts_num = self.dataset_cfg.TRAIN_LABEL_FILTER.min_pts
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
@@ -74,7 +96,20 @@ class inHouseDataset(DatasetTemplate):
 
     # this function will replace the get_lidar in the future
     def get_pcd(self, idx):
-        pass
+        assert self.dataset_cfg.MODALITY
+        modality = self.dataset_cfg.MODALITY
+        aug_config_list = self.dataset_cfg.DATA_AUGMENTOR.AUG_CONFIG_LIST
+        for cfg in aug_config_list:
+            if cfg.NAME == 'gt_sampling':
+                feature_num = cfg.NUM_POINT_FEATURES
+                break
+        # if feature_num == 4: 
+        #     modality = 'lidar'
+        # else:
+        #     modality = 'radar'
+        pcd_file = self.root_split_path / modality / ('%s.bin' % idx)
+        assert pcd_file.exists()
+        return np.fromfile(str(pcd_file), dtype=np.float32).reshape(-1, feature_num)
 
 
     # def get_image_shape(self, idx):
@@ -355,50 +390,99 @@ class inHouseDataset(DatasetTemplate):
 
         return len(self.kitti_infos)
 
+    def check_anno_pts(self, input_dict):
+        pts = input_dict['points']
+        num_pts = input_dict['num_points_in_gt']
+        pcd = open3d.geometry.PointCloud()
+        pcd.points = open3d.utility.Vector3dVector(pts[:,:3])
+        bbox = input_dict['gt_boxes']
+        o3d_num_list = []
+        if bbox.size == 0:
+            return
+        else:
+            for b in bbox:
+                o3d_box = get_bbx_param(b)
+                o3d_inidces = o3d_box.get_point_indices_within_bounding_box(pcd.points)
+                num = len(o3d_inidces)
+                o3d_num_list += [num]
+            o3d_num_pts = np.array(o3d_num_list)
+            sum_diff = (o3d_num_pts - num_pts).sum()
+            if sum_diff != 0:
+                print('different num pts compare with create_data and training')
+            # print(o3d_num_pts - num_pts)
+
+
     def __getitem__(self, index):
         # index = 4
-        if self._merge_all_iters_to_one_epoch:
-            index = index % len(self.kitti_infos)
+        # num_pts = 0
+        def load_item(index):
+        # while num_pts < 100:
+            if self._merge_all_iters_to_one_epoch:
+                index = index % len(self.kitti_infos)
 
-        info = copy.deepcopy(self.kitti_infos[index])
+            info = copy.deepcopy(self.kitti_infos[index])
 
-        # sample_idx = info['point_cloud']['lidar_idx']
-        sample_idx = info['timestamp']
+            sample_idx = info['timestamp']
+            if sample_idx == 1643180631900:
+                print('the problematic sample is here')
+            points = self.get_pcd(sample_idx)
+            # print('raw points shape = ', points.shape)
+            # if len(points) > 512:
+            #     print('sth is wrong here')
+            calib = self.get_calib(sample_idx)
+            input_dict = {
+                'points': points,
+                'frame_id': sample_idx,
+                'calib': calib,
+            }
 
-        points = self.get_lidar(sample_idx)
-        calib = self.get_calib(sample_idx)
+            if 'annos' in info:
+                annos = info['annos']
+                annos = common_utils.drop_info_with_name(annos, name='DontCare')
+                loc, dims, rots = annos['location'], annos['dimensions'], annos['rotation_y']
+                gt_names = annos['name']
+                gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
+                gt_boxes_lidar = box_utils.boxes3d_inhouse_pcd(gt_boxes_camera)
+                # only filters during training
+                if self.training:
+                    empty_mask = annos['num_points_in_gt'] > self.train_filter_pts_num
+                    gt_names = gt_names[empty_mask]
+                    gt_boxes_lidar = gt_boxes_lidar[empty_mask]
+                    gt_pts_num = annos['num_points_in_gt'][empty_mask]
+                else:
+                    empty_mask = annos['num_points_in_gt'] > 0
+                    gt_names = gt_names[empty_mask]
+                    gt_boxes_lidar = gt_boxes_lidar[empty_mask]
+                    gt_pts_num = annos['num_points_in_gt'][empty_mask]
 
-        # img_shape = info['image']['image_shape']
-        # if self.dataset_cfg.FOV_POINTS_ONLY:
-        #     pts_rect = calib.lidar_to_rect(points[:, 0:3])
-        #     fov_flag = self.get_fov_flag(pts_rect, img_shape, calib)
-        #     points = points[fov_flag]
-
-        input_dict = {
-            'points': points,
-            'frame_id': sample_idx,
-            'calib': calib,
-        }
-
-        if 'annos' in info:
-            annos = info['annos']
-            annos = common_utils.drop_info_with_name(annos, name='DontCare')
-            loc, dims, rots = annos['location'], annos['dimensions'], annos['rotation_y']
-            gt_names = annos['name']
-            gt_boxes_camera = np.concatenate([loc, dims, rots[..., np.newaxis]], axis=1).astype(np.float32)
-            gt_boxes_lidar = box_utils.boxes3d_kitti_camera_to_lidar(gt_boxes_camera, calib)
-
-            input_dict.update({
-                'gt_names': gt_names,
-                'gt_boxes': gt_boxes_lidar
-            })
-            road_plane = self.get_road_plane(sample_idx)
-            if road_plane is not None:
-                input_dict['road_plane'] = road_plane
-
-        data_dict = self.prepare_data(data_dict=input_dict)
-
-        # data_dict['image_shape'] = img_shape
+                input_dict.update({
+                    'gt_names': gt_names,
+                    'gt_boxes': gt_boxes_lidar,
+                    'num_points_in_gt': gt_pts_num
+                })
+                # ============ check if num_points_in_gt is the same in open3d ============
+                self.check_anno_pts(input_dict)
+                # ============ check if num_points_in_gt is the same in open3d ============
+                road_plane = self.get_road_plane(sample_idx)
+                if road_plane is not None:
+                    input_dict['road_plane'] = road_plane
+            
+            data_dict = self.prepare_data(data_dict=input_dict)
+            data_dict.pop('num_points_in_gt')
+            # if sample_idx == 1643180631900:
+            #     self.check_anno_pts(data_dict)
+            return data_dict
+        data_dict = load_item(index)
+        pts_num = data_dict['points'].shape[0]
+        gt_num = data_dict['gt_boxes'].shape[0]
+        loop_flag = (pts_num < 50) or (gt_num == 0)
+        while loop_flag:
+            new_index = np.random.randint(self.__len__())
+            data_dict = load_item(new_index)
+            pts_num = data_dict['points'].shape[0]
+            gt_num = data_dict['gt_boxes'].shape[0]
+            loop_flag = (pts_num < 50) or (gt_num == 0)
+        
         return data_dict
 
 # don't run this for creation

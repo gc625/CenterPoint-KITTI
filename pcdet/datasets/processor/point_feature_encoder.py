@@ -26,10 +26,14 @@ class PointFeatureEncoder(object):
                 use_lead_xyz: whether to use xyz as point-wise features
                 ...
         """
+        
         data_dict['points'], use_lead_xyz = getattr(self, self.point_encoding_config.encoding_type)(
             data_dict['points']
         )
         data_dict['use_lead_xyz'] = use_lead_xyz
+        # if data_dict['points'].shape[0] < 50:
+        #     print('sth is wrong here')
+        #     print('number of input points: ', data_dict['points'].shape[0])
         return data_dict
 
     def absolute_coordinates_encoding(self, points=None):

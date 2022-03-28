@@ -91,11 +91,11 @@ def remove_points_in_boxes3d(points, boxes3d):
 def boxes3d_kitti_camera_to_lidar(boxes3d_camera, calib):
     """
     Args:
-        boxes3d_camera: (N, 7) [x, y, z, l, h, w, r] in rect camera coords
+        boxes3d_camera: (N, 7) [x, y, z, l, h, w, r] in rect camera coords, r in radius
         calib:
 
     Returns:
-        boxes3d_lidar: [x, y, z, dx, dy, dz, heading], (x, y, z) is the box center
+        boxes3d_lidar: [x, y, z, dx, dy, dz, heading], (x, y, z) is the box center with origin at (.5, .5, .5)
 
     """
     xyz_camera = boxes3d_camera[:, 0:3]
@@ -103,6 +103,13 @@ def boxes3d_kitti_camera_to_lidar(boxes3d_camera, calib):
     xyz_lidar = calib.rect_to_lidar(xyz_camera)
     xyz_lidar[:, 2] += h[:, 0] / 2
     return np.concatenate([xyz_lidar, l, w, h, -(r + np.pi / 2)], axis=-1)
+
+def boxes3d_inhouse_pcd(boxes3d):
+    xyz_camera = boxes3d[:, 0:3]
+    l, w, h, r = boxes3d[:, 3:4], boxes3d[:, 4:5], boxes3d[:, 5:6], boxes3d[:, 6:7]
+    # xyz_lidar = calib.rect_to_lidar(xyz_camera)
+    xyz_camera[:, 2] += h[:, 0] / 2
+    return np.concatenate([xyz_camera, l, w, h, r], axis=-1)
 
 
 def boxes3d_kitti_fakelidar_to_lidar(boxes3d_lidar):

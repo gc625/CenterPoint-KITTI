@@ -118,16 +118,19 @@ class DatasetTemplate(torch_data.Dataset):
         if self.training:
             assert 'gt_boxes' in data_dict, 'gt_boxes should be provided for training'
             gt_boxes_mask = np.array([n in self.class_names for n in data_dict['gt_names']], dtype=np.bool_)
-
+            # augmentation for pointRCNN is not supported yet
             data_dict = self.data_augmentor.forward(
                 data_dict={
                     **data_dict,
                     'gt_boxes_mask': gt_boxes_mask
                 }
             )
-            if len(data_dict['gt_boxes']) == 0:
-                new_index = np.random.randint(self.__len__())
-                return self.__getitem__(new_index)
+            # print('\ndata shape in prepare_data: ', data_dict['gt_boxes'].shape)
+            # if len(data_dict['gt_boxes']) == 0:
+            #     new_index = np.random.randint(self.__len__())
+            #     return self.__getitem__(new_index)
+            # print('first if else: ', data_dict['points'].shape[0])
+            
 
         if data_dict.get('gt_boxes', None) is not None:
             selected = common_utils.keep_arrays_by_name(data_dict['gt_names'], self.class_names)
@@ -138,12 +141,16 @@ class DatasetTemplate(torch_data.Dataset):
             data_dict['gt_boxes'] = gt_boxes
 
         data_dict = self.point_feature_encoder.forward(data_dict)
-
+        # print('points shape after encoder = ', data_dict['points'].shape)
         data_dict = self.data_processor.forward(
             data_dict=data_dict
         )
+        # if data_dict['points'].shape[0] < 50:
+        #     new_index = np.random.randint(self.__len__())
+        #     return self.__getitem__(new_index)
         data_dict.pop('gt_names', None)
-
+        # if data_dict['points'].shape[0] < 50:
+        #     print('num pts in prepare_data: ', data_dict['points'].shape)
         return data_dict
 
     @staticmethod
@@ -155,6 +162,7 @@ class DatasetTemplate(torch_data.Dataset):
         batch_size = len(batch_list)
         ret = {}
 
+        # print(data_dict['points'][0].shape)
         for key, val in data_dict.items():
             try:
                 if key in ['voxels', 'voxel_num_points']:
@@ -178,4 +186,5 @@ class DatasetTemplate(torch_data.Dataset):
                 raise TypeError
 
         ret['batch_size'] = batch_size
+        # print(ret['points'].shape)
         return ret

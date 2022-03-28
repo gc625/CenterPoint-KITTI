@@ -79,15 +79,63 @@ class PointHeadTemplate(nn.Module):
             bs_mask = (bs_idx == k)
             points_single = points[bs_mask][:, 1:4]
             point_cls_labels_single = point_cls_labels.new_zeros(bs_mask.sum())
+            # wrong rotation angle for points_in_boxes_gpu, need to reverse the yaw angle
+            bbox_get_pts = torch.clone(gt_boxes[k:k + 1, :, 0:7])
+            bbox_get_pts[:,:,-1] = -bbox_get_pts[:,:,-1] # this works from time to time
             box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                points_single.unsqueeze(dim=0), gt_boxes[k:k + 1, :, 0:7].contiguous()
+                points_single.unsqueeze(dim=0), bbox_get_pts.contiguous()
             ).long().squeeze(dim=0)
             box_fg_flag = (box_idxs_of_pts >= 0)
             if set_ignore_flag:
+                extend_bbox_get_pts = extend_gt_boxes[k:k+1, :, 0:7]
+                extend_bbox_get_pts[:, :, -1] = -extend_bbox_get_pts[:, :, -1]
                 extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                    points_single.unsqueeze(dim=0), extend_gt_boxes[k:k+1, :, 0:7].contiguous()
+                    points_single.unsqueeze(dim=0), extend_bbox_get_pts.contiguous()
                 ).long().squeeze(dim=0)
                 fg_flag = box_fg_flag
+                if fg_flag.sum() == 0:
+                    print('sth is wrong here')
+                    print('shape of gt boxes: ', gt_boxes.shape)
+                    # ======= debug with open3d ========
+                    import open3d 
+                    import numpy as np
+                    from scipy.spatial.transform import Rotation as R
+
+                    def get_rotation(yaw):
+                        # x,y,_ = arr[:3]
+                        # yaw = np.arctan(y/x)
+                        angle = np.array([0, 0, yaw])
+                        r = R.from_euler('XYZ', angle)
+                        return r.as_matrix()
+
+                    def get_bbx_param(obj_info, scale=1.1):
+
+                        center = obj_info[:3]
+                        extent = obj_info[3:6]
+                        angle = -obj_info[6]
+                        # center[-1] += 0.5 * extent[-1]
+
+                        rot_m = get_rotation(angle)
+                        
+                        obbx = open3d.geometry.OrientedBoundingBox(center.T, rot_m, extent.T)
+                        return obbx
+                    pts = points_single.cpu().detach().numpy()
+                    pts = pts[:,:3]
+                    pcd = open3d.geometry.PointCloud()
+                    pcd.points = open3d.utility.Vector3dVector(pts)
+                    box_test = gt_boxes[0, 0, :].cpu().detach().numpy()
+                    o3d_box = get_bbx_param(box_test)
+                    indices_o3d = o3d_box.get_point_indices_within_bounding_box(pcd.points)
+                    test_pts = points_single[indices_o3d]
+                    bbox = gt_boxes[:,0:1, :]
+                    test_pts -= bbox[0, 0, :3]
+                    bbox[0, 0, :3] -= bbox[0, 0, :3]
+                    print(len(indices_o3d))
+                    if len(indices_o3d) != 0:
+                        new_result = roiaware_pool3d_utils.points_in_boxes_gpu(
+                            test_pts.unsqueeze(dim=0), bbox[:,:,:7].contiguous()
+                        ).long().squeeze(dim=0)
+                    
                 ignore_flag = fg_flag ^ (extend_box_idxs_of_pts >= 0)
                 point_cls_labels_single[ignore_flag] = -1
             elif use_ball_constraint:

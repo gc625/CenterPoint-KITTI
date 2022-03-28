@@ -23,7 +23,8 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             print('new iters')
 
         lr_scheduler.step(accumulated_iter)
-
+        if batch['points'].shape[0] < 100:
+            print('sth is going wrong with data loader')
         try:
             cur_lr = float(optimizer.lr)
         except:
@@ -34,7 +35,7 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 
         model.train()
         optimizer.zero_grad()
-
+        # print('\ngt_shape before feeding in network:', batch['gt_boxes'].shape)
         loss, tb_dict, disp_dict = model_func(model, batch)
 
         loss.backward()

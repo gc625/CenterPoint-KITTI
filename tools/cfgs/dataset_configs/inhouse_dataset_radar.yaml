@@ -1,5 +1,6 @@
 DATASET: 'inHouseDataset'
-DATA_PATH: '/root/data/public/shangqi/radar/kitti_format'
+# DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
+DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
 
 POINT_CLOUD_RANGE: [0, -40, -2, 70.4, 40, 3]
 
@@ -15,6 +16,7 @@ INFO_PATH: {
 
 FOV_POINTS_ONLY: True
 
+MODALITY: 'radar'
 
 DATA_AUGMENTOR:
     DISABLE_AUG_LIST: ['placeholder']
@@ -24,7 +26,8 @@ DATA_AUGMENTOR:
           DB_INFO_PATH:
               - inhouse_dbinfos_train.pkl
           PREPARE: {
-             filter_by_min_points: ['Car:3', 'Pedestrian:1', 'Cyclist:1'],
+            #  filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
+            filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
              filter_by_difficulty: [10],
           }
 
@@ -34,8 +37,8 @@ DATA_AUGMENTOR:
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
           LIMIT_WHOLE_SCENE: True
 
-        - NAME: random_world_flip
-          ALONG_AXIS_LIST: ['y']
+        # - NAME: random_world_flip
+        #   ALONG_AXIS_LIST: ['y']
 
         - NAME: random_world_rotation
           WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
@@ -62,7 +65,7 @@ DATA_PROCESSOR:
       }
 
     - NAME: transform_points_to_voxels
-      VOXEL_SIZE: [0.05, 0.05, 5]
+      VOXEL_SIZE: [0.05, 0.05, 0.1]
       MAX_POINTS_PER_VOXEL: 5
       MAX_NUMBER_OF_VOXELS: {
         'train': 16000,

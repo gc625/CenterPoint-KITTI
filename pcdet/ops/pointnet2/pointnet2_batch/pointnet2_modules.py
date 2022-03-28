@@ -33,8 +33,13 @@ class _PointnetSAModuleBase(nn.Module):
                 xyz_flipped,
                 pointnet2_utils.furthest_point_sample(xyz, self.npoint)
             ).transpose(1, 2).contiguous() if self.npoint is not None else None
-
+        # if new_xyz is None:
+        #     print('sth is wrong here')
         for i in range(len(self.groupers)):
+            xyz = xyz.contiguous()
+            if new_xyz is not None:
+                new_xyz = new_xyz.contiguous()
+            features = features.contiguous()
             new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
 
             new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)

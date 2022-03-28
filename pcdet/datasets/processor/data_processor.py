@@ -141,6 +141,30 @@ class DataProcessor(object):
         data_dict['voxel_num_points'] = num_points
         return data_dict
 
+    def sample_radar_points(self, data_dict=None, config=None):
+        # make sure it's upsampling the radar points
+        if data_dict is None:
+            return partial(self.sample_radar_points, config=config)
+        num_points = config.NUM_POINTS[self.mode]
+        if num_points == -1:
+            return data_dict
+        points = data_dict['points']
+        if num_points < len(points):
+            # print('sth is wrong here')
+            raise RuntimeError('radar points sampling only applies for upsampling')
+        else:
+            choice = np.arange(0, len(points), dtype=np.int32) # keep all the origianal poitns
+            # print(len(points))
+            extra_num = num_points - len(points)
+            try:
+                extra_choice = np.random.choice(choice, extra_num, replace=True)
+            except:
+                print(len(points))
+            choice = np.concatenate((choice, extra_choice), axis=0)
+        np.random.shuffle(choice)
+        data_dict['points'] = points[choice]
+        return data_dict
+
     def sample_points(self, data_dict=None, config=None):
         if data_dict is None:
             return partial(self.sample_points, config=config)
@@ -168,7 +192,8 @@ class DataProcessor(object):
         else:
             choice = np.arange(0, len(points), dtype=np.int32)
             if num_points > len(points):
-                extra_choice = np.random.choice(choice, num_points - len(points), replace=False)
+                # extra_choice = np.random.choice(choice, num_points - len(points), replace=False)
+                extra_choice = np.random.choice(choice, num_points - len(points), replace=True)
                 choice = np.concatenate((choice, extra_choice), axis=0)
             np.random.shuffle(choice)
         data_dict['points'] = points[choice]
@@ -204,6 +229,7 @@ class DataProcessor(object):
         """
 
         for cur_processor in self.data_processor_queue:
+            # print(data_dict['points'].shape)
             data_dict = cur_processor(data_dict=data_dict)
 
         return data_dict

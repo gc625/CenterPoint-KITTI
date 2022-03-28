@@ -11,6 +11,7 @@ class PointRCNN(Detector3DTemplate):
             batch_dict = cur_module(batch_dict)
 
         if self.training:
+            # print('\n' + batch_dict['frame_id']+ '\n')
             loss, tb_dict, disp_dict = self.get_training_loss()
 
             ret_dict = {
