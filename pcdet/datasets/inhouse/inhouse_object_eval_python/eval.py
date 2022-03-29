@@ -466,6 +466,7 @@ def inhouse_calculate_iou_partly(gt_annos, dt_annos, metric, num_parts=50):
         num_parts: int. a parameter for fast calculate algorithm
     """
     assert len(gt_annos) == len(dt_annos)
+    print('runing inhouse iou calculation')
     total_dt_num = np.stack([len(a["name"]) for a in dt_annos], 0)
     total_gt_num = np.stack([len(a["name"]) for a in gt_annos], 0)
     num_examples = len(gt_annos)
@@ -568,7 +569,7 @@ def eval_class(gt_annos,
     num_examples = len(gt_annos)
     split_parts = get_split_parts(num_examples, num_parts)
 
-    rets = inhouse_calculate_iou_partly(dt_annos, gt_annos, metric, num_parts)
+    rets = calculate_iou_partly(dt_annos, gt_annos, metric, num_parts)
     overlaps, parted_overlaps, total_dt_num, total_gt_num = rets
     N_SAMPLE_PTS = 41
     num_minoverlap = len(min_overlaps)

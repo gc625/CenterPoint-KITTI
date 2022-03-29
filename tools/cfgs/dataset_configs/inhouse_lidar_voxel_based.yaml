@@ -1,5 +1,8 @@
 DATASET: 'inHouseDataset'
-DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
+DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
+
+# POINT_CLOUD_RANGE: [0, -40, -2, 70.4, 40, 3]
+# some radar points may locate at x < 0
 POINT_CLOUD_RANGE: [0, -40, -2, 70, 40, 3]
 
 DATA_SPLIT: {
@@ -12,10 +15,10 @@ INFO_PATH: {
     'test': [inhouse_infos_val.pkl],
 }
 
-# FOV_POINTS_ONLY: True
+FOV_POINTS_ONLY: True
 
 
-MODALITY: 'radar'
+MODALITY: 'lidar'
 
 TRAIN_LABEL_FILTER: 
   min_pts: 1
@@ -28,19 +31,19 @@ DATA_AUGMENTOR:
           DB_INFO_PATH:
               - inhouse_dbinfos_train.pkl
           PREPARE: {
-            #  filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
-            filter_by_min_points: ['Car:5'],
+             filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
+            # filter_by_min_points: ['Car:5'],
              filter_by_difficulty: [10],
           }
 
-          SAMPLE_GROUPS: ['Car:20']
-          NUM_POINT_FEATURES: 6
+          SAMPLE_GROUPS: ['Car:20','Pedestrian:15', 'Cyclist:15']
+          NUM_POINT_FEATURES: 4
           DATABASE_WITH_FAKELIDAR: False
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
           LIMIT_WHOLE_SCENE: True
 
         - NAME: random_world_flip
-          ALONG_AXIS_LIST: ['x']
+          ALONG_AXIS_LIST: ['y']
 
         - NAME: random_world_rotation
           WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
@@ -51,8 +54,8 @@ DATA_AUGMENTOR:
 
 POINT_FEATURE_ENCODING: {
     encoding_type: absolute_coordinates_encoding,
-    used_feature_list: ['x', 'y', 'z', 'speed', 'power', 'rcs'],
-    src_feature_list: ['x', 'y', 'z', 'speed', 'power', 'rcs'],
+    used_feature_list: ['x', 'y', 'z', 'intensity'],
+    src_feature_list: ['x', 'y', 'z', 'intensity'],
 }
 
 

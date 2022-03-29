@@ -256,9 +256,10 @@ class CenterHead(nn.Module):
                         (length, width),
                         min_overlap=self.target_cfg.GAUSSIAN_OVERLAP)
                     radius = max(self.target_cfg.MIN_RADIUS, int(radius))
-
+                    # ===============================================================
                     # be really careful for the coordinate system of
                     # your box annotation.
+                    # ===============================================================
                     x, y, z = task_boxes[idx][k][0], task_boxes[idx][k][
                         1], task_boxes[idx][k][2]
 

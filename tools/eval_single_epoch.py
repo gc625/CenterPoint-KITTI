@@ -23,13 +23,13 @@ from train_utils.train_utils import train_model
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/centerpoint_server.yaml', help='specify the config for training')
+    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/centerpoint_radar_car.yaml', help='specify the config for training')
 
-    parser.add_argument('--batch_size', type=int, default=8, required=False, help='batch size for training')
+    parser.add_argument('--batch_size', type=int, default=1, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=1, required=False, help='number of epochs to train for')
-    parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
+    parser.add_argument('--workers', type=int, default=1, help='number of workers for dataloader')
     parser.add_argument('--extra_tag', type=str, default='server_debug', help='extra tag for this experiment')
-    parser.add_argument('--ckpt', type=str, default='/root/dj/code/CenterPoint-KITTI/output/centerpoint_server/server_debug/ckpt/checkpoint_epoch_1.pth', help='checkpoint to start from')
+    parser.add_argument('--ckpt', type=str, default='/root/dj/code/CenterPoint-KITTI/output/centerpoint_radar_car/no_aug/ckpt/checkpoint_epoch_13.pth', help='checkpoint to start from')
     parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
     parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
@@ -87,7 +87,7 @@ def main():
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     
 
-    log_file = output_dir / ('log_train_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+    log_file = output_dir / ('log_eval_%s.txt' % datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
     logger = common_utils.create_logger(log_file, rank=cfg.LOCAL_RANK)
     log_str = 'CKPT PATH for this experiment: ' + str(ckpt_dir)
     logger.info('**' * 30)

@@ -38,17 +38,17 @@ DATA_AUGMENTOR:
              filter_by_difficulty: [10],
           }
 
-          SAMPLE_GROUPS: ['Car:0']
+          SAMPLE_GROUPS: ['Car:5']
           NUM_POINT_FEATURES: 6
           DATABASE_WITH_FAKELIDAR: False
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
           LIMIT_WHOLE_SCENE: True
 
-        # - NAME: random_world_flip
-        #   ALONG_AXIS_LIST: ['y']
+        - NAME: random_world_flip
+          ALONG_AXIS_LIST: ['y']
 
-        # - NAME: random_world_rotation
-        #   WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
+        - NAME: random_world_rotation
+          WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
 
         - NAME: random_world_scaling
           WORLD_SCALE_RANGE: [0.95, 1.05]
