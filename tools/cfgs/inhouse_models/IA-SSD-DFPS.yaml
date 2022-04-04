@@ -18,7 +18,7 @@ DATA_CONFIG:
                 'train': True,
                 'test': False
             }
-FREEZE_MODE: head
+
 MODEL:
     NAME: IASSD
      
@@ -28,7 +28,7 @@ MODEL:
             # Sampling setting:
             NPOINT_LIST: [[512], [256], [128], [64], [-1], [256]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
-            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['D-FPS'], ['D-FPS'], [], []]
             # Group and Abstraction setting:
             RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
             NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            

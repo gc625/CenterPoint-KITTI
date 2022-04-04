@@ -131,13 +131,15 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
     def __init__(self, *,
                  npoint_list: List[int],
                  sample_range_list: List[int],
-                 sample_type_list: List[int],
+                 sample_type_list: List[str],
                  radii: List[float],
                  nsamples: List[int],
                  mlps: List[List[int]],                 
                  use_xyz: bool = True,
                  dilated_group=False,
+                 reverse=False,
                  pool_method='max_pool',
+                 sample_idx=False,
                  aggregation_mlp: List[int],
                  confidence_mlp: List[int],
                  num_class):
@@ -150,7 +152,9 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         :param mlps: list of list of int, spec of the pointnet before the global pooling for each scale
         :param use_xyz:
         :param pool_method: max_pool / avg_pool
+        :param sample_idx: whether to return sample_idx
         :param dilated_group: whether to use dilated group
+        :param reverse: if True, return bg samples instead of fg samples
         :param aggregation_mlp: list of int, spec aggregation mlp
         :param confidence_mlp: list of int, spec confidence mlp
         :param num_class: int, class for process
@@ -165,8 +169,9 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.npoint_list = npoint_list
         self.groupers = nn.ModuleList()
         self.mlps = nn.ModuleList()
-
+        self.reverse = reverse
         out_channels = 0
+        self.sample_idx = sample_idx
         for i in range(len(radii)):
             radius = radii[i]
             nsample = nsamples[i]
@@ -276,11 +281,26 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 elif ('cls' in sample_type) or ('ctr' in sample_type):
                     cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
                     score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
                     score_picked, sample_idx = torch.topk(score_pred, npoint, dim=-1)           
                     sample_idx = sample_idx.int()
 
                 elif 'D-FPS' in sample_type or 'DFS' in sample_type:
                     sample_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+
+                elif 'mix' in sample_type.lower():
+                    fps_npoints = int(npoint/2)
+                    ctr_npoints = npoint - fps_npoints
+                    sample_idx_fps = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+                    # ==========
+                    cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
+                    score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
+                    score_picked, sample_idx_ctr = torch.topk(score_pred, ctr_npoints, dim=-1)           
+                    sample_idx_ctr = sample_idx_ctr.int()
+                    sample_idx = torch.cat([sample_idx_fps, sample_idx_ctr], dim=-1)  # [bs, npoint * 2]
 
                 elif 'F-FPS' in sample_type or 'FFS' in sample_type:
                     features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
@@ -385,7 +405,10 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         else:
             cls_features = None
 
-        return new_xyz, new_features, cls_features
+        if self.sample_idx:
+            return new_xyz, new_features, cls_features, sampled_idx_list
+        else:
+            return new_xyz, new_features, cls_features
 
 class Vote_layer(nn.Module):
     """ Light voting module with limitation"""
@@ -438,6 +461,76 @@ class Vote_layer(nn.Module):
             vote_xyz = xyz_select + ctr_offsets
 
         return vote_xyz, new_features, xyz_select, ctr_offsets
+
+class Fusion_Layer(nn.Module):
+    def __init__(self,
+                *,
+                npoints: int,
+                sample_type: str,
+                nsamples = 5,
+                mlps: List[int],
+                use_xyz: bool = True,
+                aggregation_mlp: List[int],
+                confidence_mlp: List[int],
+                num_class):
+        '''
+        :param 
+        '''
+        super().__init__()
+        self.num_ctr = npoints
+        self.sample_type = sample_type
+        self.nsamples = nsamples
+        self.mlp = nn.ModuleList()
+        shared_mlps = []
+        for k in range(len(mlps) - 1):
+            shared_mlps.extend([
+                    nn.Conv2d(mlps[k], mlps[k + 1],
+                              kernel_size=1, bias=False),
+                    nn.BatchNorm2d(mlps[k + 1]),
+                    nn.ReLU()
+                ])
+        self.mlps.append(nn.Sequential(*shared_mlps))
+
+    def forward(self, fg_xyz, fg_features, bg_xyz, bg_features):
+        '''
+        :param fg_xyz [B, N, 3]
+        :param fg_features [B, N, C]
+        :param bg_xyz [B, N, 3]
+        :param bg_features [B, N, C]
+        '''
+
+        # take bg features and xyz, sample it using D-FPS, F-FPS or ctr-aware
+        # cat each fg_feat with selected bg_feat
+        # using MLP to calculate weight
+        # new_fg_feat = weighted sum of bg + itself
+        fg_xyz_flipped = fg_xyz.transpose(1, 2).contiguous() 
+        bg_xyz_flipped = bg_xyz.transpose(1, 2).contiguous() 
+        bg_feat_flipped = bg_features.transpose(1, 2).contiguous()
+        if self.sample_type == 'D-FPS':
+            sample_idx = pointnet2_utils.furthest_point_sample(bg_xyz_flipped, self.nsamples)
+        elif ('cls' in self.sample_type) or ('ctr' in self.sample_type):
+            pass
+        else:
+            raise NotImplementedError
+        # B x nsample x 3 
+        sample_bg_xyz = pointnet2_utils.gather_operation(bg_xyz_flipped, sample_idx).transpose(1, 2).contiguous()
+        # B x C x nsample
+        sample_bg_feat = pointnet2_utils.gather_operation(bg_feat_flipped, sample_idx).contiguous()
+        # B x C x nsample -> B x C x nsample x N_ctr
+        sample_bg_feat = sample_bg_feat.unsqueeze(-1).repeat([1, 1, 1, self.num_ctr])
+        
+        fg_features_self = fg_features_self.unsqueeze(2).repeat([1, 2, 1, 1]) # B x 2C x 1 x N_ctr
+        fusion_feats = torch.cat((sample_bg_feat, fg_features), dim=1) # B x 2C x nsample x N_ctr
+        fusion_feats = torch.cat((fusion_feats, fg_features_self), dim=2) # B x 2C x nsample+1 x N_ctr
+        weights = self.weights_mlp(fusion_feats) # B x 1 x nsample+1 x N_ctr
+        
+        fg_features_expand = fg_features.unsqueeze(2) # B x C x 1 x N_ctr
+        fused_feat_origin = torch.cat((fg_features_expand, sample_bg_feat), dim=2) # B x C x nsample+1 x N_ctr
+        final_feats = weights * fused_feat_origin
+        final_feats = final_feats.sum(dim=2).unsqueeze(2) # B x C x N_ctr
+        return fg_xyz, final_feats
+
+
 
 
 class PointnetSAModule(PointnetSAModuleMSG):

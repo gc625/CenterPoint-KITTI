@@ -45,6 +45,7 @@ def parse_config():
     parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--save_to_file', default=False, help='')
+    parser.add_argument('--freeze_part', default=True, help='load head params only and freeze them during training')
 
     args = parser.parse_args()
 
@@ -133,17 +134,17 @@ def main():
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    if args.ckpt is not None:
-        it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
-        last_epoch = start_epoch + 1
-    else:
-        ckpt_list = glob.glob(str(ckpt_dir / '*checkpoint_epoch_*.pth'))
-        if len(ckpt_list) > 0:
-            ckpt_list.sort(key=os.path.getmtime)
-            it, start_epoch = model.load_params_with_optimizer(
-                ckpt_list[-1], to_cpu=dist, optimizer=optimizer, logger=logger
-            )
-            last_epoch = start_epoch + 1
+    # if args.ckpt is not None:
+    #     it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
+    #     last_epoch = start_epoch + 1
+    # else:
+    #     ckpt_list = glob.glob(str(ckpt_dir / '*checkpoint_epoch_*.pth'))
+    #     if len(ckpt_list) > 0:
+    #         ckpt_list.sort(key=os.path.getmtime)
+    #         it, start_epoch = model.load_params_with_optimizer(
+    #             ckpt_list[-1], to_cpu=dist, optimizer=optimizer, logger=logger
+    #         )
+    #         last_epoch = start_epoch + 1
 
     model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
     if dist_train:
@@ -207,7 +208,7 @@ def main():
     )
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs)
+    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs, reload=False)
     # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     # repeat_eval_ckpt(

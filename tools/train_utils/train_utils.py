@@ -7,7 +7,7 @@ from torch.nn.utils import clip_grad_norm_
 
 
 def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, accumulated_iter, optim_cfg,
-                    rank, tbar, total_it_each_epoch, dataloader_iter, tb_log=None, leave_pbar=False):
+                    rank, tbar, total_it_each_epoch, dataloader_iter, tb_log=None, leave_pbar=False, logger=None):
     if total_it_each_epoch == len(train_loader):
         dataloader_iter = iter(train_loader)
 
@@ -34,6 +34,21 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
             tb_log.add_scalar('meta_data/learning_rate', cur_lr, accumulated_iter)
 
         model.train()
+        # # freeze some layers
+        # freeze_mode = model.model_cfg.FREEZE_MODE
+        # mode_list = ['backbone', 'head', 'attach']
+        # assert freeze_mode in mode_list
+        # if freeze_mode is not None:
+        #     for mode in mode_list:
+        #         if mode in freeze_mode.lower():
+        #             for idx, single_module in enumerate(model.module_list):
+        #                 if mode in str(single_module.__repr__).lower():
+        #                     for name, param in single_module.named_parameters():
+                                
+        #                         if (logger is not None) and (param.requires_grad):
+        #                             logger.info('params in {name} is not freezed'.format(name=name))
+
+
         optimizer.zero_grad()
         # print('\ngt_shape before feeding in network:', batch['gt_boxes'].shape)
         loss, tb_dict, disp_dict = model_func(model, batch)
@@ -65,8 +80,21 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False):
+                merge_all_iters_to_one_epoch=False, logger=None):
     accumulated_iter = start_iter
+    # freeze some layers
+    freeze_mode = model.model_cfg.FREEZE_MODE
+    mode_list = ['backbone', 'head', 'attach']
+    assert freeze_mode in mode_list
+    if freeze_mode is not None:
+        for mode in mode_list:
+            if mode in freeze_mode.lower():
+                for idx, single_module in enumerate(model.module_list):
+                    if mode in str(single_module.__repr__).lower():
+                        for name, param in single_module.named_parameters():
+                            param.requires_grad = False
+                            if logger is not None:
+                                logger.info('freeze params in {name}'.format(name=name))
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:
@@ -91,7 +119,8 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 rank=rank, tbar=tbar, tb_log=tb_log,
                 leave_pbar=(cur_epoch + 1 == total_epochs),
                 total_it_each_epoch=total_it_each_epoch,
-                dataloader_iter=dataloader_iter
+                dataloader_iter=dataloader_iter,
+                logger=logger
             )
 
             # save trained model

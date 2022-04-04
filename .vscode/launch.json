@@ -1,0 +1,26 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": [
+                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD.yaml", 
+                "--epoch", "10", 
+                "--workers", "8", 
+                "--extra_tag", "sample_result_radar",
+                "--batch_size", "16",
+                "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD/freeze_lidar_head_20/ckpt/checkpoint_epoch_9.pth",
+                "--freeze_part", "False",
+
+            ]
+        }
+    ]
+}

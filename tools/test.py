@@ -52,10 +52,11 @@ def parse_config():
     return args, cfg
 
 
-def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False):
+def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True):
     # load checkpoint
-    model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
-    model.cuda()
+    if reload:
+        model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
+        model.cuda()
 
     # start evaluation
     eval_utils.eval_one_epoch(

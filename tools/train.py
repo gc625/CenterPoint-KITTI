@@ -4,7 +4,7 @@ import glob
 from itertools import cycle
 import os
 # import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 from test import repeat_eval_ckpt, eval_single_ckpt
 # from eval_utils import eval_utils
@@ -23,8 +23,7 @@ from train_utils.train_utils import train_model
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/centerpoint_radar_car.yaml', help='specify the config for training')
-
+    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD.yaml', help='specify the config for training')
     parser.add_argument('--batch_size', type=int, default=1, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=1, required=False, help='number of epochs to train for')
     parser.add_argument('--workers', type=int, default=1, help='number of workers for dataloader')
@@ -45,6 +44,7 @@ def parse_config():
     parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--save_to_file', default=False, help='')
+    parser.add_argument('--freeze_part', default=True, help='load head params only and freeze them during training')
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
 
     args = parser.parse_args()
@@ -132,7 +132,11 @@ def main():
     start_epoch = it = 0
     last_epoch = -1
     if args.pretrained_model is not None:
-        model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+        if args.freeze_part:
+            model.load_params_from_file_dynamic(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
+            cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
+        else:
+            model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
@@ -176,7 +180,8 @@ def main():
         lr_warmup_scheduler=lr_warmup_scheduler,
         ckpt_save_interval=args.ckpt_save_interval,
         max_ckpt_save_num=args.max_ckpt_save_num,
-        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch
+        merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
+        logger=logger
     )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'

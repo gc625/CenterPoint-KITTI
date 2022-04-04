@@ -13,8 +13,19 @@ from ..model_utils import model_nms_utils
 class Detector3DTemplate(nn.Module):
     def __init__(self, model_cfg, num_class, dataset):
         super().__init__()
-        self.model_cfg = model_cfg
+        self.entire_cfg = model_cfg
+        if model_cfg.get('USE_ATTACH', False):
+            # build attached backbone
+            self.model_cfg = model_cfg.MAIN_NETWORK
+            self.attach_model_cfg = model_cfg.ATTACH_NETWORK
+        else:
+            self.model_cfg = model_cfg
+            self.attach_model_cfg = None
         self.num_class = num_class
+
+        # make compatible to IASSD
+        self.model_cfg.BACKBONE_3D['num_class'] = self.num_class
+
         self.dataset = dataset
         self.class_names = dataset.class_names
         self.register_buffer('global_step', torch.LongTensor(1).zero_())
@@ -23,6 +34,7 @@ class Detector3DTemplate(nn.Module):
             'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
             'backbone_2d', 'dense_head',  'point_head', 'roi_head'
         ]
+        self.attach_module_topology = []
 
     @property
     def mode(self):
@@ -38,7 +50,8 @@ class Detector3DTemplate(nn.Module):
             'num_point_features': self.dataset.point_feature_encoder.num_point_features,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
-            'voxel_size': self.dataset.voxel_size
+            'voxel_size': self.dataset.voxel_size,
+            'is_attach': False
         }
         for module_name in self.module_topology:
             module, model_info_dict = getattr(self, 'build_%s' % module_name)(
@@ -47,12 +60,37 @@ class Detector3DTemplate(nn.Module):
             self.add_module(module_name, module)
         return model_info_dict['module_list']
 
+    # ===================================================    
+    def build_attach_network(self):
+        model_info_dict = {
+            'module_list': [],
+            'num_rawpoint_features': self.dataset.point_feature_encoder.num_point_features,
+            'num_point_features': self.dataset.point_feature_encoder.num_point_features,
+            'grid_size': self.dataset.grid_size,
+            'point_cloud_range': self.dataset.point_cloud_range,
+            'voxel_size': self.dataset.voxel_size,
+            'is_attach': True
+        }
+        for module_name in self.attach_module_topology:
+            module, model_info_dict = getattr(self, 'build_%s' % module_name)(
+                model_info_dict=model_info_dict
+            )
+            self.add_module(module_name, module)
+        return model_info_dict['module_list']
+    # ===================================================
+
     def build_vfe(self, model_info_dict):
-        if self.model_cfg.get('VFE', None) is None:
+        
+        if model_info_dict['is_attach']:
+            cur_model_cfg = self.attach_model_cfg
+        else:
+            cur_model_cfg = self.model_cfg
+
+        if cur_model_cfg.get('VFE', None) is None:
             return None, model_info_dict
 
-        vfe_module = vfe.__all__[self.model_cfg.VFE.NAME](
-            model_cfg=self.model_cfg.VFE,
+        vfe_module = vfe.__all__[cur_model_cfg.VFE.NAME](
+            model_cfg=cur_model_cfg.VFE,
             num_point_features=model_info_dict['num_rawpoint_features'],
             point_cloud_range=model_info_dict['point_cloud_range'],
             voxel_size=model_info_dict['voxel_size']
@@ -62,11 +100,16 @@ class Detector3DTemplate(nn.Module):
         return vfe_module, model_info_dict
 
     def build_backbone_3d(self, model_info_dict):
-        if self.model_cfg.get('BACKBONE_3D', None) is None:
+        if model_info_dict['is_attach']:
+            cur_model_cfg = self.attach_model_cfg
+        else:
+            cur_model_cfg = self.model_cfg
+
+        if cur_model_cfg.get('BACKBONE_3D', None) is None:
             return None, model_info_dict
 
-        backbone_3d_module = backbones_3d.__all__[self.model_cfg.BACKBONE_3D.NAME](
-            model_cfg=self.model_cfg.BACKBONE_3D,
+        backbone_3d_module = backbones_3d.__all__[cur_model_cfg.BACKBONE_3D.NAME](
+            model_cfg=cur_model_cfg.BACKBONE_3D,
             input_channels=model_info_dict['num_point_features'],
             grid_size=model_info_dict['grid_size'],
             voxel_size=model_info_dict['voxel_size'],
@@ -77,11 +120,16 @@ class Detector3DTemplate(nn.Module):
         return backbone_3d_module, model_info_dict
 
     def build_map_to_bev_module(self, model_info_dict):
-        if self.model_cfg.get('MAP_TO_BEV', None) is None:
+        if model_info_dict['is_attach']:
+            cur_model_cfg = self.attach_model_cfg
+        else:
+            cur_model_cfg = self.model_cfg
+
+        if cur_model_cfg.get('MAP_TO_BEV', None) is None:
             return None, model_info_dict
 
-        map_to_bev_module = map_to_bev.__all__[self.model_cfg.MAP_TO_BEV.NAME](
-            model_cfg=self.model_cfg.MAP_TO_BEV,
+        map_to_bev_module = map_to_bev.__all__[cur_model_cfg.MAP_TO_BEV.NAME](
+            model_cfg=cur_model_cfg.MAP_TO_BEV,
             grid_size=model_info_dict['grid_size']
         )
         model_info_dict['module_list'].append(map_to_bev_module)
@@ -89,11 +137,15 @@ class Detector3DTemplate(nn.Module):
         return map_to_bev_module, model_info_dict
 
     def build_backbone_2d(self, model_info_dict):
-        if self.model_cfg.get('BACKBONE_2D', None) is None:
+        if model_info_dict['is_attach']:
+            cur_model_cfg = self.attach_model_cfg
+        else:
+            cur_model_cfg = self.model_cfg
+        if cur_model_cfg.get('BACKBONE_2D', None) is None:
             return None, model_info_dict
 
-        backbone_2d_module = backbones_2d.__all__[self.model_cfg.BACKBONE_2D.NAME](
-            model_cfg=self.model_cfg.BACKBONE_2D,
+        backbone_2d_module = backbones_2d.__all__[cur_model_cfg.BACKBONE_2D.NAME](
+            model_cfg=cur_model_cfg.BACKBONE_2D,
             input_channels=model_info_dict['num_bev_features']
         )
         model_info_dict['module_list'].append(backbone_2d_module)
@@ -101,11 +153,16 @@ class Detector3DTemplate(nn.Module):
         return backbone_2d_module, model_info_dict
 
     def build_pfe(self, model_info_dict):
-        if self.model_cfg.get('PFE', None) is None:
+        if model_info_dict['is_attach']:
+            cur_model_cfg = self.attach_model_cfg
+        else:
+            cur_model_cfg = self.model_cfg
+
+        if cur_model_cfg.get('PFE', None) is None:
             return None, model_info_dict
 
-        pfe_module = pfe.__all__[self.model_cfg.PFE.NAME](
-            model_cfg=self.model_cfg.PFE,
+        pfe_module = pfe.__all__[cur_model_cfg.PFE.NAME](
+            model_cfg=cur_model_cfg.PFE,
             voxel_size=model_info_dict['voxel_size'],
             point_cloud_range=model_info_dict['point_cloud_range'],
             num_bev_features=model_info_dict['num_bev_features'],
@@ -375,3 +432,33 @@ class Detector3DTemplate(nn.Module):
         logger.info('==> Done')
 
         return it, epoch
+
+    def load_params_from_file_dynamic(self, filename, logger, to_cpu=False, id='backbone'):
+        if not os.path.isfile(filename):
+            raise FileNotFoundError
+
+        logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
+        loc_type = torch.device('cpu') if to_cpu else None
+        checkpoint = torch.load(filename, map_location=loc_type)
+        model_state_disk = checkpoint['model_state']
+
+        if 'version' in checkpoint:
+            logger.info('==> Checkpoint trained from version: %s' % checkpoint['version'])
+
+        update_model_state = {}
+        for key, val in model_state_disk.items():
+            if key in self.state_dict() and self.state_dict()[key].shape == model_state_disk[key].shape:
+                if id in key:
+                    # only load part of the parameters
+                    update_model_state[key] = val
+                    logger.info('Update weight %s: %s' % (key, str(val.shape)))
+
+        state_dict = self.state_dict()
+        state_dict.update(update_model_state)
+        self.load_state_dict(state_dict)
+
+        for key in state_dict:
+            if key not in update_model_state:
+                logger.info('Not updated weight %s: %s' % (key, str(state_dict[key].shape)))
+
+        logger.info('==> Done (loaded %d/%d)' % (len(update_model_state), len(self.state_dict())))

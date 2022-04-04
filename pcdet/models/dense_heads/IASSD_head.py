@@ -152,8 +152,19 @@ class IASSD_Head(PointHeadTemplate):
             bs_mask = (bs_idx == k)
             points_single = points[bs_mask][:, 1:4]
             point_cls_labels_single = point_cls_labels.new_zeros(bs_mask.sum())
+            # reverse yaw angle
+            # =====================================
+            bbox_get_pts = torch.clone(gt_boxes)
+            bbox_get_pts[:,:,6] = -bbox_get_pts[:,:,6] # this works from time to time
+            '''
+            =====================================
+            = Because we are using the downsampled points, not all gt boxes have points inside of it
+            = However, the empty gt boxes of fg points will caused an error in loss calculation
+            = at the starting phase, we may end up with no fg pts in gt box
+            =====================================
+            '''
             box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                points_single.unsqueeze(dim=0), gt_boxes[k:k + 1, :, 0:7].contiguous()
+                points_single.unsqueeze(dim=0), bbox_get_pts[k:k + 1, :, 0:7].contiguous()
             ).long().squeeze(dim=0)
             box_fg_flag = (box_idxs_of_pts >= 0)
 
@@ -171,8 +182,13 @@ class IASSD_Head(PointHeadTemplate):
                     fg_flag = query_fg_flag
                     box_idxs_of_pts = query_idxs_of_pts
             elif use_ex_gt_assign: ##
+                # reverse yaw angle
+                # =====================================
+                bbox_get_pts = torch.clone(extend_gt_boxes)
+                bbox_get_pts[:,:,6] = -bbox_get_pts[:,:,6] # this works from time to time
+                # =====================================
                 extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                    points_single.unsqueeze(dim=0), extend_gt_boxes[k:k+1, :, 0:7].contiguous()
+                    points_single.unsqueeze(dim=0), bbox_get_pts[k:k+1, :, 0:7].contiguous()
                 ).long().squeeze(dim=0)
                 extend_fg_flag = (extend_box_idxs_of_pts >= 0)
                 
@@ -187,8 +203,13 @@ class IASSD_Head(PointHeadTemplate):
                     box_idxs_of_pts = extend_box_idxs_of_pts 
                                 
             elif set_ignore_flag: 
+                # reverse yaw angle
+                # =====================================
+                bbox_get_pts = torch.clone(extend_gt_boxes)
+                bbox_get_pts[:,:,6] = -bbox_get_pts[:,:,6] # this works from time to time
+                # =====================================
                 extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
-                    points_single.unsqueeze(dim=0), extend_gt_boxes[k:k+1, :, 0:7].contiguous()
+                    points_single.unsqueeze(dim=0), bbox_get_pts[k:k+1, :, 0:7].contiguous()
                 ).long().squeeze(dim=0)
                 fg_flag = box_fg_flag
                 ignore_flag = fg_flag ^ (extend_box_idxs_of_pts >= 0)
@@ -202,15 +223,18 @@ class IASSD_Head(PointHeadTemplate):
 
             else:
                 raise NotImplementedError
-
+            # boxes of fg points
             gt_box_of_fg_points = gt_boxes[k][box_idxs_of_pts[fg_flag]]
+            # assign class label to points
             point_cls_labels_single[fg_flag] = 1 if self.num_class == 1 or binary_label else gt_box_of_fg_points[:, -1].long()
-            point_cls_labels[bs_mask] = point_cls_labels_single
+            point_cls_labels[bs_mask] = point_cls_labels_single 
             bg_flag = (point_cls_labels_single == 0) # except ignore_id
             # box_bg_flag
-            fg_flag = fg_flag ^ (fg_flag & bg_flag)
+            # ==============================================================
+            # add box_bg_points to gt_box_of_fg_points
+            fg_flag = fg_flag ^ (fg_flag & bg_flag) # point are both background and foreground
             gt_box_of_fg_points = gt_boxes[k][box_idxs_of_pts[fg_flag]]
-
+            # ==============================================================
             gt_boxes_of_fg_points.append(gt_box_of_fg_points)
             box_idxs_labels[bs_mask] = box_idxs_of_pts
             gt_box_of_points[bs_mask] = gt_boxes[k][box_idxs_of_pts]
@@ -227,13 +251,22 @@ class IASSD_Head(PointHeadTemplate):
 
         gt_boxes_of_fg_points = torch.cat(gt_boxes_of_fg_points, dim=0)
         targets_dict = {
-            'point_cls_labels': point_cls_labels,
-            'point_box_labels': point_box_labels,
-            'gt_box_of_fg_points': gt_boxes_of_fg_points,
-            'box_idxs_labels': box_idxs_labels,
-            'gt_box_of_points': gt_box_of_points,
+            'point_cls_labels': point_cls_labels, # assign class to points
+            'point_box_labels': point_box_labels, # assign box parameters to points
+            'gt_box_of_fg_points': gt_boxes_of_fg_points, # gt boxes of fg points
+            'box_idxs_labels': box_idxs_labels, # assign box idx to points
+            'gt_box_of_points': gt_box_of_points, # gt boxes of gt fg and bg points (enlarge box)
         }
         return targets_dict
+
+    # @staticmethod
+    # def calculate_point_recall(point_cls_preds, point_cls_labels):
+    #     '''
+    #     calculate the recall of sampled points, default sample num_points to total_num/2
+    #     '''
+
+    #     pass
+
 
     def assign_targets(self, input_dict):
         """
@@ -536,8 +569,12 @@ class IASSD_Head(PointHeadTemplate):
         ctr_offsets = self.forward_ret_dict['ctr_offsets']
         centers_pred = centers_origin + ctr_offsets
         centers_pred = centers_pred[pos_mask][:, 1:4]
-
-        vote_loss = F.smooth_l1_loss(centers_pred, center_box_labels, reduction='mean')
+        if centers_pred.nelement() == 0:
+            # dummy loss
+            vote_loss = torch.tensor([100.0]).to(centers_pred.device)
+            vote_loss.requires_grad = True
+        else:
+            vote_loss = F.smooth_l1_loss(centers_pred, center_box_labels, reduction='mean')
         if tb_dict is None:
             tb_dict = {}
         tb_dict.update({'vote_loss': vote_loss.item()})
@@ -595,7 +632,11 @@ class IASSD_Head(PointHeadTemplate):
             cls_weights = (negative_cls_weights + 1.0 * positives).float()
             pos_normalizer = positives.sum(dim=0).float()
             cls_weights /= torch.clamp(pos_normalizer, min=1.0)
+            # ========= calculate sample recall ===============
 
+
+
+            # ========= calculate sample recall ===============
             one_hot_targets = point_cls_preds.new_zeros(*list(point_cls_labels.shape), self.num_class + 1)
             one_hot_targets.scatter_(-1, (point_cls_labels * (point_cls_labels >= 0).long()).unsqueeze(dim=-1).long(), 1.0)
             one_hot_targets = one_hot_targets[..., 1:]
@@ -616,7 +657,7 @@ class IASSD_Head(PointHeadTemplate):
                 'sa%s_pos_num' % str(i): pos_normalizer.item()
             })
 
-        sa_ins_loss = sa_ins_loss / (len(sa_ins_labels) - ignore)
+        sa_ins_loss = sa_ins_loss / (len(sa_ins_labels) - ignore + 1e-8)
         tb_dict.update({
                 'sa_loss_ins': sa_ins_loss.item(),
             })
@@ -754,10 +795,15 @@ class IASSD_Head(PointHeadTemplate):
         gt_boxes = self.forward_ret_dict['center_gt_box_of_fg_points']
         pred_boxes = self.forward_ret_dict['point_box_preds']
         pred_boxes = pred_boxes[pos_mask]
-        loss_corner = loss_utils.get_corner_loss_lidar(
-            pred_boxes[:, 0:7],
-            gt_boxes[:, 0:7]
-        )
+        if pos_mask.sum() > 0:
+            loss_corner = loss_utils.get_corner_loss_lidar(
+                pred_boxes[:, 0:7],
+                gt_boxes[:, 0:7]
+            )
+        else:
+            # dummy loss when no pred boxes are assigned to gts
+            loss_corner = torch.tensor([100.0]).to(pos_mask.device)
+            loss_corner.requires_grad = True
         loss_corner = loss_corner.mean()
         loss_corner = loss_corner * self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS['corner_weight']
         if tb_dict is None:

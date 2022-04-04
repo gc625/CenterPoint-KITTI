@@ -451,7 +451,7 @@ class inHouseDataset(DatasetTemplate):
                     gt_boxes_lidar = gt_boxes_lidar[empty_mask]
                     gt_pts_num = annos['num_points_in_gt'][empty_mask]
                 else:
-                    empty_mask = annos['num_points_in_gt'] > 0
+                    empty_mask = annos['num_points_in_gt'] > 1
                     gt_names = gt_names[empty_mask]
                     gt_boxes_lidar = gt_boxes_lidar[empty_mask]
                     gt_pts_num = annos['num_points_in_gt'][empty_mask]
@@ -461,8 +461,9 @@ class inHouseDataset(DatasetTemplate):
                     'gt_boxes': gt_boxes_lidar,
                     'num_points_in_gt': gt_pts_num
                 })
-                # ============ check if num_points_in_gt is the same in open3d ============
-                self.check_anno_pts(input_dict)
+                # ============ check if num_points_in_gt is the same in open3d (radar only) ============
+                if self.dataset_cfg.MODALITY == 'radar':
+                    self.check_anno_pts(input_dict)
                 # ============ check if num_points_in_gt is the same in open3d ============
                 road_plane = self.get_road_plane(sample_idx)
                 if road_plane is not None:
