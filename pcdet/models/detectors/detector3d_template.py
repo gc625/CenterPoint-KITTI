@@ -14,13 +14,14 @@ class Detector3DTemplate(nn.Module):
     def __init__(self, model_cfg, num_class, dataset):
         super().__init__()
         self.entire_cfg = model_cfg
-        if model_cfg.get('USE_ATTACH', False):
-            # build attached backbone
-            self.model_cfg = model_cfg.MAIN_NETWORK
-            self.attach_model_cfg = model_cfg.ATTACH_NETWORK
-        else:
-            self.model_cfg = model_cfg
-            self.attach_model_cfg = None
+        # if model_cfg.get('USE_ATTACH', False):
+        #     # build attached backbone
+        #     self.model_cfg = model_cfg.MAIN_NETWORK
+        #     self.attach_model_cfg = model_cfg.ATTACH_NETWORK
+        # else:
+        #     self.model_cfg = model_cfg
+        #     self.attach_model_cfg = None
+        self.model_cfg = model_cfg
         self.num_class = num_class
 
         # make compatible to IASSD

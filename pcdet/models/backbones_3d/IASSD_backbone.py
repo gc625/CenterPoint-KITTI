@@ -148,14 +148,13 @@ class IASSD_Backbone(nn.Module):
         ctr_batch_idx = batch_idx.view(batch_size, -1)[:, :li_xyz.shape[1]]
         ctr_batch_idx = ctr_batch_idx.contiguous().view(-1)
         batch_dict['ctr_offsets'] = torch.cat((ctr_batch_idx[:, None].float(), ctr_offsets.contiguous().view(-1, 3)), dim=1)
-
         batch_dict['centers'] = torch.cat((ctr_batch_idx[:, None].float(), centers.contiguous().view(-1, 3)), dim=1)
         batch_dict['centers_origin'] = torch.cat((ctr_batch_idx[:, None].float(), centers_origin.contiguous().view(-1, 3)), dim=1)
-
+        batch_dict['ctr_batch_idx'] = ctr_batch_idx
         
         center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1])
         batch_dict['centers_features'] = center_features
-        batch_dict['ctr_batch_idx'] = ctr_batch_idx
+
         batch_dict['encoder_xyz'] = encoder_xyz
         batch_dict['encoder_coords'] = encoder_coords
         batch_dict['sa_ins_preds'] = sa_ins_preds
@@ -186,8 +185,10 @@ class IASSD_Backbone(nn.Module):
                 else:
                     sample_xyz = point_saved_path / ('sample_list_' + ('%s' % idx) + '_xyz')
                     sample_gt = point_saved_path / ('sample_list_' + ('%s' % idx) + '_gt')
-                np.save(str(sample_xyz), xyz_list)
+                
                 np.save(str(sample_gt), gt)
+                np.save(str(sample_xyz), xyz_list)
+
                 # np.save(str(new_file), point_new.detach().cpu().numpy())
         
         return batch_dict

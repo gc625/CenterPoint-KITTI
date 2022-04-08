@@ -133,7 +133,10 @@ def main():
     last_epoch = -1
     if args.pretrained_model is not None:
         if args.freeze_part:
-            model.load_params_from_file_dynamic(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
+            if cfg.MODEL.get('MULTIBACKBONE', False):
+                model.load_params_from_file_singlebranch(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
+            else:
+                model.load_params_from_file_dynamic(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
             cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
         else:
             model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)

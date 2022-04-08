@@ -7,9 +7,12 @@ from .second_net import SECONDNet
 from .centerpoint import CenterPoint 
 from .centerpoint_rcnn import CenterPointRCNN
 from .IASSD import IASSD
+from .detectorX_template import DetectorX_template
+from .IASSD_X import IASSD_X
 
 __all__ = {
     'Detector3DTemplate': Detector3DTemplate,
+    'DetectorXTemplate': DetectorX_template,
     'SECONDNet': SECONDNet,
     'PartA2Net': PartA2Net,
     'PVRCNN': PVRCNN,
@@ -17,7 +20,8 @@ __all__ = {
     'PointRCNN': PointRCNN,
     'CenterPoint': CenterPoint,
     'CenterPointRCNN': CenterPointRCNN,
-    'IASSD': IASSD
+    'IASSD': IASSD,
+    'IASSDX': IASSD_X
 }
 
 

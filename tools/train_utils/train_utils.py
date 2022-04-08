@@ -83,18 +83,20 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 merge_all_iters_to_one_epoch=False, logger=None):
     accumulated_iter = start_iter
     # freeze some layers
-    freeze_mode = model.model_cfg.FREEZE_MODE
-    mode_list = ['backbone', 'head', 'attach']
-    assert freeze_mode in mode_list
+    freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
+
     if freeze_mode is not None:
-        for mode in mode_list:
-            if mode in freeze_mode.lower():
-                for idx, single_module in enumerate(model.module_list):
-                    if mode in str(single_module.__repr__).lower():
-                        for name, param in single_module.named_parameters():
-                            param.requires_grad = False
-                            if logger is not None:
-                                logger.info('freeze params in {name}'.format(name=name))
+        mode_list = ['backbone', 'head', 'attach']
+        assert freeze_mode in mode_list
+        if freeze_mode is not None:
+            for mode in mode_list:
+                if mode in freeze_mode.lower():
+                    for idx, single_module in enumerate(model.module_list):
+                        if mode in str(single_module.__repr__).lower():
+                            for name, param in single_module.named_parameters():
+                                param.requires_grad = False
+                                if logger is not None:
+                                    logger.info('freeze params in {name}'.format(name=name))
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:

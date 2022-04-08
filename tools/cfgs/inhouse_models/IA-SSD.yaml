@@ -48,7 +48,7 @@ MODEL:
             LAYER_INPUT: [0, 1, 2, 3, 4, 3]
             CTR_INDEX: [-1, -1, -1, -1, -1, 5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-            # SAVE_SAMPLE_LIST: True
+            SAVE_SAMPLE_LIST: True
 
     POINT_HEAD:
         NAME: IASSD_Head

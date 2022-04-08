@@ -2,12 +2,11 @@ CLASS_NAMES: ['Car']
 
 DATA_CONFIG:
     _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/inhouse_radar_point_based.yaml
-    # TODO: handle data_processor base on different modality
+
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
 
-        
         -   NAME: sample_points
             NUM_POINTS: {
                 'train': 512,
@@ -19,57 +18,37 @@ DATA_CONFIG:
                 'train': True,
                 'test': False
             }
-# FREEZE_MODE: head
+FREEZE_MODE: head
 MODEL:
-    NAME: IASSDX
-    MULTIBACKBONE: True
+    NAME: IASSD
+     
     BACKBONE_3D:
         NAME: IASSD_Backbone
-        BRANCH_NUM: 1
-        # set the last module as fusion config
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[512], [256], [128], [64], [-1]]
-            SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1]]
-            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], []]
+            NPOINT_LIST: [[512], [256], [64], [32], [-1], [32]]
+            SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
+            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['ctr_aware'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
-            RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], []]
-            NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], []]            
-            MLPS: [
-                    [[16,16,32],  [32,32,64]],
-                    [[64,64,128],  [64,96,128]],
-                    [[128,128,256],  [128,256,256]],
-                    [],
-                    [128]
-                   ]
+            RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
+            NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            
+            MLPS: [[[16,16,32],  [32,32,64]],
+                   [[64,64,128],  [64,96,128]],
+                   [[128,128,256],  [128,256,256]],
+                   [],
+                   [128],
+                   [[256,256,512], [256,512,1024]]]
             
-            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer']
-            DILATED_GROUP: [False, False, False, False, False]            
-            AGGREGATION_MLPS: [[64], [128], [256], [256], []]
+            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer', 'SA_Layer']
+            DILATED_GROUP: [False, False, False, False, False, False]            
+            AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
             # Instance-aware setting:
-            CONFIDENCE_MLPS: [[], [128], [256], [], []]
+            CONFIDENCE_MLPS: [[64], [128], [256], [], [], []]
 
-            LAYER_INPUT: [0, 1, 2, 3, 4]
-            CTR_INDEX: [-1, -1, -1, -1, -1]
+            LAYER_INPUT: [0, 1, 2, 3, 4, 3]
+            CTR_INDEX: [-1, -1, -1, -1, -1, 5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-            # SAVE_SAMPLE_LIST: True
-
-        FUSION_CONFIG:      
-            NPOINT_LIST: [[256]]
-            SAMPLE_RANGE_LIST: [[-1]]
-            # SAMPLE_METHOD_LIST: &sample_method_list [[]]
-            # # Group and Abstraction setting:
-            RADIUS_LIST: [[4.8, 6.4]]
-            NSAMPLE_LIST: [[16, 32]]            
-            MLPS: [[[256,256,512], [256,512,1024]]]
-            LAYER_TYPE: ['SA_Layer']
-            DILATED_GROUP: [False]            
-            AGGREGATION_MLPS: [[512]]
-            CONFIDENCE_MLPS: [[]]
-            LAYER_INPUT: [3]
-            CTR_INDEX: [5]
-            MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-
+            SAVE_SAMPLE_LIST: True
 
     POINT_HEAD:
         NAME: IASSD_Head
