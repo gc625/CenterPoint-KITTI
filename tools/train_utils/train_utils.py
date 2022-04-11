@@ -92,8 +92,11 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
             for mode in mode_list:
                 if mode in freeze_mode.lower():
                     for idx, single_module in enumerate(model.module_list):
-                        if mode in str(single_module.__repr__).lower():
+                        if mode in str(single_module.__repr__).lower():                   
+                            
                             for name, param in single_module.named_parameters():
+                                if 'fusion' in name:
+                                    continue
                                 param.requires_grad = False
                                 if logger is not None:
                                     logger.info('freeze params in {name}'.format(name=name))

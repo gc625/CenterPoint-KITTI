@@ -61,20 +61,20 @@ MODEL:
             # SAVE_SAMPLE_LIST: True
 
         FUSION_CONFIG:      
-            NPOINT_LIST: [[256]]
-            SAMPLE_RANGE_LIST: [[-1]]
+            NPOINT_LIST: [[256]] # not used
+            SAMPLE_RANGE_LIST: [[-1]] # not used
             # SAMPLE_METHOD_LIST: &sample_method_list [[]]
             # # Group and Abstraction setting:
-            RADIUS_LIST: [[4.8, 6.4]]
-            NSAMPLE_LIST: [[16, 32]]            
-            MLPS: [[[256,256,512], [256,512,1024]]]
-            LAYER_TYPE: ['SA_Layer']
-            DILATED_GROUP: [False]            
-            AGGREGATION_MLPS: [[512]]
+            RADIUS_LIST: [[4.8, 6.4]] # not used
+            NSAMPLE_LIST: [16]
+            MLPS: [[256,256,512]]
+            LAYER_TYPE: ['DF_Layer']
+            DILATED_GROUP: [False] # not used
+            AGGREGATION_MLPS: [[512]] # not used
             CONFIDENCE_MLPS: [[]]
-            LAYER_INPUT: [3]
+            LAYER_INPUT: [4] # not used
             CTR_INDEX: [5]
-            MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
+            MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0] # not used
 
 
     POINT_HEAD:

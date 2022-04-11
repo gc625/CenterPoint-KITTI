@@ -131,15 +131,27 @@ def main():
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
+    if args.freeze_part:
+        if cfg.get('FREEZE_MODE', None) is None:
+            raise ValueError
+        else:
+            cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
     if args.pretrained_model is not None:
         if args.freeze_part:
-            if cfg.MODEL.get('MULTIBACKBONE', False):
-                model.load_params_from_file_singlebranch(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
-            else:
-                model.load_params_from_file_dynamic(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
-            cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
+        #     if cfg.MODEL.get('MULTIBACKBONE', False):
+        #         model.load_params_from_file_singlebranch(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
+        #     else:
+            model.load_params_from_file_dynamic(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
+            # cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
         else:
             model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+
+    if cfg.get('BACKBONE_CKPT', False):
+        for temp_dict in cfg.BACKBONE_CKPT:
+            bb_id = temp_dict.ID
+            ckpt_file = temp_dict.FILE_PATH
+            model.load_backbone_params(ckpt_file, logger, backbone_id=bb_id)
+        
 
     if args.ckpt is not None:
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)

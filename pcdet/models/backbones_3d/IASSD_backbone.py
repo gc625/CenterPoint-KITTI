@@ -152,7 +152,7 @@ class IASSD_Backbone(nn.Module):
         batch_dict['centers_origin'] = torch.cat((ctr_batch_idx[:, None].float(), centers_origin.contiguous().view(-1, 3)), dim=1)
         batch_dict['ctr_batch_idx'] = ctr_batch_idx
         
-        center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1])
+        center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1]) # shape?
         batch_dict['centers_features'] = center_features
 
         batch_dict['encoder_xyz'] = encoder_xyz
