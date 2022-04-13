@@ -62,6 +62,28 @@ def knn_point(nsample, xyz, new_xyz):
         sorted=False)
     return group_idx
 
+def ball_point(nsample, xyz, new_xyz, radius):
+    """
+    Input:
+        nsample: max sample number in local region
+        xyz: all points, [B, N, C]
+        new_xyz: query points, [B, S, C]
+        radius: float 
+    Return:
+        group_idx: grouped points index, [B, S, nsample], index for xyz
+        mask_sum: where no points within radius is found
+    """
+    sqrdists = square_distance(new_xyz, xyz)
+    top_dist, group_idx = torch.topk(sqrdists, nsample, dim = -1, largest=False, \
+        sorted=False)
+    b, n, _ = new_xyz.shape
+    original_idx = torch.arange(n).reshape([1, -1, 1]).to(xyz.device).long()
+    original_idx = original_idx.repeat([b, 1, nsample])
+    mask = top_dist > radius
+    mask_sum = mask.sum(dim=-1)
+    group_idx[mask] = original_idx[mask]
+    return group_idx, mask_sum
+
 def index_points_gather(points, fps_idx):
     """
     Input:
@@ -259,7 +281,117 @@ class PointConvD(nn.Module):
         new_points = self.relu(new_points)
 
         return new_xyz.permute(0, 2, 1), new_points, fps_idx
+class DomainFusion(nn.Module):
+    def __init__(self, nsample, in_channel, mlp, bn = use_bn, use_leaky = True):
+        super(DomainFusion, self).__init__()
+        self.nsample = nsample
+        self.bn = bn
+        self.mlp_convs = nn.ModuleList()
+        if bn:
+            self.mlp_bns = nn.ModuleList()
+        last_channel = in_channel * 2 + 3
+        for out_channel in mlp:
+            self.mlp_convs.append(nn.Conv2d(last_channel, out_channel, 1))
+            if bn:
+                self.mlp_bns.append(nn.BatchNorm2d(out_channel))
+            last_channel = out_channel
 
+        self.weightnet1 = WeightNet(3, last_channel)
+        self.weightnet2 = WeightNet(3, last_channel)
+        self.last_channel = last_channel
+
+        self.cls_layer = nn.ModuleList()
+        self.cls_layer.extend([
+            nn.Conv1d(last_channel, 2, kernel_size=1, bias=False),
+            nn.BatchNorm1d(2),
+            nn.ReLU()
+        ])
+
+        self.relu = nn.ReLU(inplace=True) if not use_leaky else nn.LeakyReLU(LEAKY_RATE, inplace=True)
+
+
+    def forward(self, xyz1, xyz2, points1, points2):
+        """
+        Cost Volume layer for Flow Estimation
+        Input:
+            xyz1: input points position data, [B, C, N1]
+            xyz2: input points position data, [B, C, N2]
+            points1: input points data, [B, D, N1]
+            points2: input points data, [B, D, N2]
+        Return:
+            new_points: upsample points feature data, [B, D', N1]
+        """
+        # import ipdb; ipdb.set_trace()
+        return None
+        B, C, N1 = xyz1.shape
+        _, _, N2 = xyz2.shape
+        _, D1, _ = points1.shape
+        _, D2, _ = points2.shape
+        xyz1 = xyz1.permute(0, 2, 1)
+        xyz2 = xyz2.permute(0, 2, 1)
+        points1 = points1.permute(0, 2, 1)
+        points2 = points2.permute(0, 2, 1)
+        
+        # point-to-patch Volume
+        def point_to_patch(xyz1, xyz2, points1, points2):
+            knn_idx = knn_point(self.nsample, xyz2, xyz1) # B, N1, nsample
+            neighbor_xyz = index_points_group(xyz2, knn_idx)
+            direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+
+            grouped_points2 = index_points_group(points2, knn_idx) # B, N1, nsample, D2
+            grouped_points1 = points1.view(B, N1, 1, D1).repeat(1, 1, self.nsample, 1)
+            new_points = torch.cat([grouped_points1, grouped_points2, direction_xyz], dim = -1) # B, N1, nsample, D1+D2+3
+            new_points = new_points.permute(0, 3, 2, 1) # [B, D1+D2+3, nsample, N1]
+            for i, conv in enumerate(self.mlp_convs):
+                if self.bn:
+                    bn = self.mlp_bns[i]
+                    new_points =  self.relu(bn(conv(new_points)))
+                else:
+                    new_points =  self.relu(conv(new_points)) # [B, C, nsample, N1]
+
+            # weighted sum
+            weights = self.weightnet1(direction_xyz.permute(0, 3, 2, 1)) # B C nsample N1 
+
+            point_to_patch_cost = torch.sum(weights * new_points, dim = 2) # B C N
+            return point_to_patch_cost
+
+        # bidirectional point-to-patch Volume
+        point1_to_patch_cost = point_to_patch(xyz1, xyz2, points1, points2)
+        point2_to_patch_cost = point_to_patch(xyz2, xyz1, points2, points1)
+
+        full_xyz = torch.cat((xyz1, xyz2), dim=1) # B, 2N, C
+        full_cost = torch.cat((point1_to_patch_cost, point2_to_patch_cost), dim=2) # B, C, 2N
+        # full_cost = full_cost.permute(0, 2, 1) # B, 2N, C
+
+        # topK classification from both module with point-to-patch and patch-to-patch feat
+        def patch_to_patch(xyz1, point_to_patch_cost):
+            knn_idx = knn_point(self.nsample, xyz1, xyz1) # B, N1, nsample
+            neighbor_xyz = index_points_group(xyz1, knn_idx)
+            direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+
+            # weights for group cost
+            weights = self.weightnet2(direction_xyz.permute(0, 3, 2, 1)) # B C nsample N1 
+            grouped_point_to_patch_cost = index_points_group(point_to_patch_cost.permute(0, 2, 1), knn_idx) # B, N1, nsample, C
+            patch_to_patch_cost = torch.sum(weights * grouped_point_to_patch_cost.permute(0, 3, 2, 1), dim = 2) # B C N
+            return patch_to_patch_cost
+
+        patch_to_patch_feat = patch_to_patch(full_xyz, full_cost)
+        confidence = self.cls_layer(patch_to_patch_feat).permute(0, 2, 1) # B, 2N, num_class(2)
+        cls_features_max, cls_pred = confidence.max(dim=-1)
+
+
+        # Patch to Patch Cost
+        knn_idx = knn_point(self.nsample, xyz1, xyz1) # B, N1, nsample
+        neighbor_xyz = index_points_group(xyz1, knn_idx)
+        direction_xyz = neighbor_xyz - xyz1.view(B, N1, 1, C)
+
+        # weights for group cost
+        weights = self.weightnet2(direction_xyz.permute(0, 3, 2, 1)) # B C nsample N1 
+        grouped_point_to_patch_cost = index_points_group(point_to_patch_cost.permute(0, 2, 1), knn_idx) # B, N1, nsample, C
+        patch_to_patch_cost = torch.sum(weights * grouped_point_to_patch_cost.permute(0, 3, 2, 1), dim = 2) # B C N
+
+        return patch_to_patch_cost
+    
 class PointConvFlow(nn.Module):
     def __init__(self, nsample, in_channel, mlp, bn = use_bn, use_leaky = True):
         super(PointConvFlow, self).__init__()
@@ -297,10 +429,10 @@ class PointConvFlow(nn.Module):
         _, _, N2 = xyz2.shape
         _, D1, _ = points1.shape
         _, D2, _ = points2.shape
-        xyz1 = xyz1.permute(0, 2, 1)
-        xyz2 = xyz2.permute(0, 2, 1)
-        points1 = points1.permute(0, 2, 1)
-        points2 = points2.permute(0, 2, 1)
+        xyz1 = xyz1.permute(0, 2, 1) # B, N, C
+        xyz2 = xyz2.permute(0, 2, 1) # B, N, C
+        points1 = points1.permute(0, 2, 1) # B, N, C
+        points2 = points2.permute(0, 2, 1) # B, N, C
 
         # point-to-patch Volume
         knn_idx = knn_point(self.nsample, xyz2, xyz1) # B, N1, nsample

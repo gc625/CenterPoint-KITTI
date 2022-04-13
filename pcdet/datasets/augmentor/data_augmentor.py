@@ -15,7 +15,7 @@ class DataAugmentor(object):
         self.data_augmentor_queue = []
         aug_config_list = augmentor_configs if isinstance(augmentor_configs, list) \
             else augmentor_configs.AUG_CONFIG_LIST
-
+        self.aug_attach_pcd = augmentor_configs.get('ATTACH_PCD', False)
         for cur_cfg in aug_config_list:
             if not isinstance(augmentor_configs, list):
                 if cur_cfg.NAME in augmentor_configs.DISABLE_AUG_LIST:
@@ -60,9 +60,15 @@ class DataAugmentor(object):
         rot_range = config['WORLD_ROT_ANGLE']
         if not isinstance(rot_range, list):
             rot_range = [-rot_range, rot_range]
-        gt_boxes, points = augmentor_utils.global_rotation(
-            data_dict['gt_boxes'], data_dict['points'], rot_range=rot_range
-        )
+        if self.aug_attach_pcd:
+            gt_boxes, points, attach_pts = augmentor_utils.global_rotation_with_attach(
+                data_dict['gt_boxes'], data_dict['points'], data_dict['attach'], rot_range=rot_range
+            )
+            data_dict['attach'] = attach_pts
+        else:
+            gt_boxes, points = augmentor_utils.global_rotation(
+                data_dict['gt_boxes'], data_dict['points'], rot_range=rot_range
+            )
 
         data_dict['gt_boxes'] = gt_boxes
         data_dict['points'] = points

@@ -12,12 +12,12 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD-DF.yaml", 
+                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD-GAN.yaml", 
                 "--epoch", "10", 
                 "--workers", "1", 
                 "--extra_tag", "debug",
                 "--batch_size", "4",
-                "--freeze_part", "False",
+                // "--freeze_part", "False",
 
             ]
         }

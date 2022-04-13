@@ -1,7 +1,7 @@
 import copy
 import pickle
 from this import d
-
+from pathlib import Path
 import numpy as np
 from skimage import io
 
@@ -50,7 +50,9 @@ class inHouseDataset(DatasetTemplate):
         self.train_filter_pts_num = self.dataset_cfg.TRAIN_LABEL_FILTER.min_pts
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
-
+        self.use_attach = self.dataset_cfg.get('USE_ATTACH', False)
+        self.attach_root = self.dataset_cfg.get('ATTACH_ROOT', None) if self.use_attach else None
+        self.attach_root = Path(self.attach_root) if self.attach_root is not None else None
         self.resample_pts_num = 50 # default setting
         for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
             if process_cfg.NAME == 'sample_radar_points':
@@ -97,6 +99,17 @@ class inHouseDataset(DatasetTemplate):
                 break
 
         return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, feature_num)
+
+    def get_attach_lidar(self, idx, root_dir):
+        lidar_file = root_dir / 'lidar' / ('%s.bin' % idx)
+        assert lidar_file.exists()
+        # aug_config_list = self.dataset_cfg.DATA_AUGMENTOR.AUG_CONFIG_LIST
+        # for cfg in aug_config_list:
+        #     if cfg.NAME == 'gt_sampling':
+        #         feature_num = cfg.NUM_POINT_FEATURES
+        #         break
+
+        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
 
     # this function will replace the get_lidar in the future
     def get_pcd(self, idx):
@@ -431,10 +444,15 @@ class inHouseDataset(DatasetTemplate):
             #     print('the problematic sample is here')
             points = self.get_pcd(sample_idx)
             calib = self.get_calib(sample_idx)
+            if self.use_attach & self.training:
+                attach = self.get_attach_lidar(sample_idx, self.attach_root)
+            else:
+                attach = None
             input_dict = {
                 'points': points,
                 'frame_id': sample_idx,
                 'calib': calib,
+                'attach': attach
             }
 
             if 'annos' in info:
@@ -451,7 +469,7 @@ class inHouseDataset(DatasetTemplate):
                     gt_boxes_lidar = gt_boxes_lidar[empty_mask]
                     gt_pts_num = annos['num_points_in_gt'][empty_mask]
                 else:
-                    empty_mask = annos['num_points_in_gt'] > 1
+                    empty_mask = annos['num_points_in_gt'] > self.train_filter_pts_num
                     gt_names = gt_names[empty_mask]
                     gt_boxes_lidar = gt_boxes_lidar[empty_mask]
                     gt_pts_num = annos['num_points_in_gt'][empty_mask]
@@ -484,7 +502,8 @@ class inHouseDataset(DatasetTemplate):
             pts_num = data_dict['points'].shape[0]
             gt_num = data_dict['gt_boxes'].shape[0]
             loop_flag = (pts_num < self.resample_pts_num) or (gt_num == 0)
-        
+        if data_dict['attach'] is None:
+            data_dict.pop('attach')
         return data_dict
 
 # don't run this for creation

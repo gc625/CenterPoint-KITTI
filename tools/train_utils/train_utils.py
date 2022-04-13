@@ -86,14 +86,13 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
     freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
 
     if freeze_mode is not None:
-        mode_list = ['backbone', 'head', 'attach']
+        mode_list = ['backbone_3d', 'multibackbone', 'head', 'attach']
         assert freeze_mode in mode_list
         if freeze_mode is not None:
             for mode in mode_list:
-                if mode in freeze_mode.lower():
+                if freeze_mode.lower() in mode:
                     for idx, single_module in enumerate(model.module_list):
-                        if mode in str(single_module.__repr__).lower():                   
-                            
+                        if mode in str(single_module.__repr__).lower():
                             for name, param in single_module.named_parameters():
                                 if 'fusion' in name:
                                     continue

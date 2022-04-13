@@ -44,11 +44,11 @@ def parse_config():
     parser.add_argument('--max_waiting_mins', type=int, default=0, help='max waiting minutes')
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--save_to_file', default=False, help='')
-    parser.add_argument('--freeze_part', default=True, help='load head params only and freeze them during training')
+    parser.add_argument('--freeze_part', type=bool, default=False, help='load head params only and freeze them during training')
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
 
     args = parser.parse_args()
-
+    print(args.freeze_part)
     cfg_from_yaml_file(args.cfg_file, cfg)
     cfg.TAG = Path(args.cfg_file).stem
     cfg.EXP_GROUP_PATH = '/'.join(args.cfg_file.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
@@ -125,13 +125,16 @@ def main():
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     model.cuda()
-
+    
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
 
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
-    if args.freeze_part:
+    # print(type(args.freeze_part))
+    # print(args.freeze_part)
+    if args.freeze_part == True:
+        # print('freeze_part is True')
         if cfg.get('FREEZE_MODE', None) is None:
             raise ValueError
         else:
@@ -145,6 +148,9 @@ def main():
             # cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
         else:
             model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+
+    if cfg.get('USE_ATTACH', False):
+        model.load_ckpt_to_attach(cfg.MODEL.ATTACH_NETWORK.CKPT_FILE, logger)
 
     if cfg.get('BACKBONE_CKPT', False):
         for temp_dict in cfg.BACKBONE_CKPT:
@@ -166,6 +172,9 @@ def main():
             last_epoch = start_epoch + 1
 
     model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
+    if cfg.get('USE_ATTACH', False):
+        model.freeze_attach(logger)
+        
     if dist_train:
         model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
