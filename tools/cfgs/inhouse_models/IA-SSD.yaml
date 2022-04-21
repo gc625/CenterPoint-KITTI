@@ -91,7 +91,7 @@ MODEL:
             LOSS_WEIGHTS: {
                 'ins_aware_weight': [0, 1.0, 1.0],
                 'vote_weight': 1.0,
-                'point_cls_weight': 1.0,
+                'point_cls_weight': 2.0,
                 'point_box_weight': 1.0,
                 'corner_weight': 1.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],

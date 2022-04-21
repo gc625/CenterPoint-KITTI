@@ -840,7 +840,7 @@ class IASSD_Head(PointHeadTemplate):
         Args:
             batch_dict:
                 batch_size:
-                centers_features: (N1 + N2 + N3 + ..., C) or (B, N, C)
+                centers_features: (N1 + N2 + N3 + ..., C) or (B x N, C)
                 centers: (N1 + N2 + N3 + ..., 4) [bs_idx, x, y, z]
                 encoder_xyz: List of points_coords in SA
                 gt_boxes (optional): (B, M, 8)

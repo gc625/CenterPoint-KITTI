@@ -120,7 +120,7 @@ class Detector3DTemplate(nn.Module):
         model_info_dict['num_point_features'] = backbone_3d_module.num_point_features
         return backbone_3d_module, model_info_dict
 
-    def build_map_to_bev_module(self, model_info_dict):
+    def build_map_to_bev_module(self, model_info_dict, custom_cfg=None):
         if model_info_dict['is_attach']:
             cur_model_cfg = self.attach_model_cfg
         else:
@@ -189,7 +189,7 @@ class Detector3DTemplate(nn.Module):
         model_info_dict['module_list'].append(dense_head_module)
         return dense_head_module, model_info_dict
 
-    def build_point_head(self, model_info_dict):
+    def build_point_head(self, model_info_dict, custom_cfg=None):
         if self.model_cfg.get('POINT_HEAD', None) is None:
             return None, model_info_dict
 
@@ -198,8 +198,10 @@ class Detector3DTemplate(nn.Module):
         else:
             num_point_features = model_info_dict['num_point_features']
 
+        head_cfg = self.model_cfg if custom_cfg is None else custom_cfg
+
         point_head_module = dense_heads.__all__[self.model_cfg.POINT_HEAD.NAME](
-            model_cfg=self.model_cfg.POINT_HEAD,
+            model_cfg=head_cfg.POINT_HEAD,
             input_channels=num_point_features,
             num_class=self.num_class if not self.model_cfg.POINT_HEAD.CLASS_AGNOSTIC else 1,
             predict_boxes_when_training=self.model_cfg.get('ROI_HEAD', False)

@@ -53,7 +53,7 @@ class inHouseDataset(DatasetTemplate):
         self.use_attach = self.dataset_cfg.get('USE_ATTACH', False)
         self.attach_root = self.dataset_cfg.get('ATTACH_ROOT', None) if self.use_attach else None
         self.attach_root = Path(self.attach_root) if self.attach_root is not None else None
-        self.resample_pts_num = 50 # default setting
+        self.resample_pts_num = 100 # default setting
         for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
             if process_cfg.NAME == 'sample_radar_points':
                 self.resample_pts_num = process_cfg.MIN_NUM_PTS
@@ -469,10 +469,13 @@ class inHouseDataset(DatasetTemplate):
                     gt_boxes_lidar = gt_boxes_lidar[empty_mask]
                     gt_pts_num = annos['num_points_in_gt'][empty_mask]
                 else:
-                    empty_mask = annos['num_points_in_gt'] > self.train_filter_pts_num
-                    gt_names = gt_names[empty_mask]
-                    gt_boxes_lidar = gt_boxes_lidar[empty_mask]
-                    gt_pts_num = annos['num_points_in_gt'][empty_mask]
+                    try:
+                        empty_mask = annos['num_points_in_gt'] > self.train_filter_pts_num
+                        gt_names = gt_names[empty_mask]
+                        gt_boxes_lidar = gt_boxes_lidar[empty_mask]
+                        gt_pts_num = annos['num_points_in_gt'][empty_mask]
+                    except:
+                        gt_pts_num = None
 
                 input_dict.update({
                     'gt_names': gt_names,
@@ -481,7 +484,8 @@ class inHouseDataset(DatasetTemplate):
                 })
                 # ============ check if num_points_in_gt is the same in open3d (radar only) ============
                 if self.dataset_cfg.MODALITY == 'radar':
-                    self.check_anno_pts(input_dict)
+                    if gt_pts_num is not None:
+                        self.check_anno_pts(input_dict)
                 # ============ check if num_points_in_gt is the same in open3d ============
                 road_plane = self.get_road_plane(sample_idx)
                 if road_plane is not None:

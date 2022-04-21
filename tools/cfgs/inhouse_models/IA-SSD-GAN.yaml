@@ -24,7 +24,7 @@ DATA_CONFIG:
             }
 
 USE_ATTACH: True
-# FREEZE_MODE: backbone
+# FREEZE_MODE: head
 MODEL:
     NAME: IASSDGAN
     ATTACH_NETWORK:
@@ -54,7 +54,11 @@ MODEL:
                 LAYER_INPUT: [0, 1, 2, 3, 4, 3]
                 CTR_INDEX: [-1, -1, -1, -1, -1, 5]
                 MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-
+    CROSS_OVER:
+        CH_IN: 512
+        MLPS: [448, 384, 320, 256]
+        LOSS_WEIGHTS: [1, 1] # [matching, recover]
+    
     BACKBONE_3D:
         NAME: IASSD_Backbone
         SA_CONFIG:
@@ -149,7 +153,55 @@ MODEL:
                 'dir_weight': 0.2
             }
 
+    SHARED_HEAD:
+        NUM_POINT_FEATURES: 256
+        POINT_HEAD:
+            NAME: IASSD_Head
+            CLS_FC: [256, 256]
+            REG_FC: [256, 256]
+            CLASS_AGNOSTIC: False
+            USE_POINT_FEATURES_BEFORE_FUSION: False
+            TARGET_CONFIG:
+                INS_AWARE_ASSIGN: True
+                GT_EXTRA_WIDTH: [0.2, 0.2, 0.2]
+            
+                ASSIGN_METHOD:
+                    NAME: 'extend_gt'
+                    ASSIGN_TYPE: 'centers_origin' #'centers'(default) ,  'centers_origin'
+                    EXTRA_WIDTH: [1.0, 1.0, 1.0]
+                    FG_PC_IGNORE: False
 
+                BOX_CODER: PointResidual_BinOri_Coder # 'PointBinResidualCoder', 'PointResidual_BinOri_Coder' 
+                BOX_CODER_CONFIG: {
+                    'angle_bin_num': 12,
+                    'use_mean_size': True,                
+                    'mean_size': [
+                        [3.9, 1.6, 1.56],
+                        [0.8, 0.6, 1.73],
+                        [1.76, 0.6, 1.73]
+                    ]
+                }
+
+            LOSS_CONFIG:
+                # Ref: 'WeightedBinaryCrossEntropy', 'WeightedCrossEntropy', 'FocalLoss'
+                LOSS_CLS: WeightedCrossEntropy
+                LOSS_REG: WeightedSmoothL1Loss
+                LOSS_INS: WeightedCrossEntropy
+                SAMPLE_METHOD_LIST: *sample_method_list
+                LOSS_VOTE_TYPE: 'none'  #'none', 'ver1', 'ver2', 
+
+                CORNER_LOSS_REGULARIZATION: True
+                CENTERNESS_REGULARIZATION: True
+                CENTERNESS_REGULARIZATION_SA: True
+                LOSS_WEIGHTS: {
+                    'ins_aware_weight': [0, 0, 0],
+                    'vote_weight': 0,
+                    'point_cls_weight': 1.0,
+                    'point_box_weight': 1.0,
+                    'corner_weight': 1.0,
+                    'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+                    'dir_weight': 0.2
+                }
     POST_PROCESSING:
         RECALL_MODE: 'normal'  # 'normal'(default), 'detail', 'speed'(no recall info)
         RECALL_THRESH_LIST: [0.3, 0.5, 0.7]

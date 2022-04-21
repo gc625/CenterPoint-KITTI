@@ -46,6 +46,7 @@ def parse_config():
     parser.add_argument('--start_epoch', type=int, default=0, help='')
     parser.add_argument('--save_to_file', default=False, help='')
     parser.add_argument('--freeze_part', default=True, help='load head params only and freeze them during training')
+    parser.add_argument('--result_dir', type=str, default=None, help='')
 
     args = parser.parse_args()
 
@@ -208,7 +209,7 @@ def main():
     )
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs, reload=False)
+    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs, reload=False, save_to_file=args.save_to_file,result_dir=args.result_dir)
     # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     # repeat_eval_ckpt(

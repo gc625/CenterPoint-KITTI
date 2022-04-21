@@ -104,8 +104,16 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     logger.info('Average predicted number of objects(%d samples): %.3f'
                 % (len(det_annos), total_pred_objects / max(1, len(det_annos))))
 
+    logger.info('******************Saving result to dir: ' + str(result_dir) + '**********************')
+
     with open(result_dir / 'result.pkl', 'wb') as f:
         pickle.dump(det_annos, f)
+
+    # gt pkl
+    import copy
+    gt_annos = [copy.deepcopy(info['annos']) for info in dataset.kitti_infos]
+    with open(result_dir / 'gt.pkl', 'wb') as f:
+        pickle.dump(gt_annos, f)
 
     result_str, result_dict = dataset.evaluation(
         det_annos, class_names,
