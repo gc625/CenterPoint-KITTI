@@ -19,7 +19,7 @@ def statistics_info(cfg, ret_dict, metric, disp_dict):
         '(%d, %d) / %d' % (metric['recall_roi_%s' % str(min_thresh)], metric['recall_rcnn_%s' % str(min_thresh)], metric['gt_num'])
 
 
-def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None):
+def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None, runtime_gt=False):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     final_output_dir = result_dir / 'final_result' / 'data'
@@ -51,10 +51,12 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     if cfg.LOCAL_RANK == 0:
         progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval', dynamic_ncols=True)
     start_time = time.time()
+    frame_ids = []
     for i, batch_dict in enumerate(dataloader):
         load_data_to_gpu(batch_dict)
         with torch.no_grad():
             pred_dicts, ret_dict = model(batch_dict)
+            frame_ids += list(batch_dict['frame_id'])
         disp_dict = {}
 
         statistics_info(cfg, ret_dict, metric, disp_dict)
@@ -111,15 +113,31 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     # gt pkl
     import copy
-    gt_annos = [copy.deepcopy(info['annos']) for info in dataset.kitti_infos]
+
+    gt_dict = {}
+    for info in dataset.kitti_infos:
+        frame_id = copy.deepcopy(info['timestamp'])
+        gt_anno = copy.deepcopy(info['annos'])
+        gt_dict[frame_id] = gt_anno
+        pass
+    # gt_annos = [copy.deepcopy(info['annos']) for info in dataset.kitti_infos]
+    gt_annos = []
+    for id in frame_ids:
+        gt_annos += [gt_dict[id]]
     with open(result_dir / 'gt.pkl', 'wb') as f:
         pickle.dump(gt_annos, f)
-
-    result_str, result_dict = dataset.evaluation(
-        det_annos, class_names,
-        eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
-        output_path=final_output_dir
-    )
+    try:
+        result_str, result_dict = dataset.evaluation(
+            det_annos, class_names, gt_annos=gt_annos,
+            eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
+            output_path=final_output_dir
+        )
+    except:
+        result_str, result_dict = dataset.evaluation(
+            det_annos, class_names,
+            eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
+            output_path=final_output_dir
+        )
 
     logger.info(result_str)
     ret_dict.update(result_dict)

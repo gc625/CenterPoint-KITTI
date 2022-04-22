@@ -4,6 +4,21 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        // {
+        //     "name": "Python: Current File",
+        //     "type": "python",
+        //     "request": "launch",
+        //     "program": "${file}",
+        //     "console": "integratedTerminal",
+        //     "justMyCode": true,
+        //     "args": [
+        //         "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD-GAN.yaml", 
+        //         "--epoch", "10", 
+        //         "--workers", "1", 
+        //         "--extra_tag", "debug",
+        //         "--batch_size", "6",
+        //     ]
+        // }
         {
             "name": "Python: Current File",
             "type": "python",
@@ -12,13 +27,14 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD-GAN.yaml", 
-                "--epoch", "10", 
+                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/IA-SSD.yaml", 
+                "--epoch", "1", 
                 "--workers", "1", 
-                "--extra_tag", "debug",
-                "--batch_size", "6",
-                // "--freeze_part", ",
-
+                "--extra_tag", "initial",
+                "--batch_size", "16",
+                "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD/initial/ckpt/checkpoint_epoch_20.pth",
+                "--save_to_file", "True",
+                "--result_dir", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD/initial/ckpt/checkpoint_epoch_20"
             ]
         }
     ]

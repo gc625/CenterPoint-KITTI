@@ -389,14 +389,17 @@ class inHouseDataset(DatasetTemplate):
 
         return annos
 
-    def evaluation(self, det_annos, class_names, **kwargs):
+    def evaluation(self, det_annos, class_names, gt_annos=None, **kwargs):
         if 'annos' not in self.kitti_infos[0].keys():
             return None, {}
 
         from .inhouse_object_eval_python import eval as inhouse_eval
 
         eval_det_annos = copy.deepcopy(det_annos)
-        eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
+        if gt_annos is None:
+            eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
+        else:
+            eval_gt_annos = gt_annos
         ap_result_str, ap_dict = inhouse_eval.inhouse_eval(eval_gt_annos, eval_det_annos, class_names)
 
         return ap_result_str, ap_dict
