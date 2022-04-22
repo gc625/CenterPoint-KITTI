@@ -505,6 +505,8 @@ class inHouseDataset(DatasetTemplate):
         loop_flag = (pts_num < self.resample_pts_num) or (gt_num == 0)
         if self.training is False:
             loop_flag = False
+            # self.logger.info('no resampling during testing')
+            
         while loop_flag:
             new_index = np.random.randint(self.__len__())
             data_dict = load_item(new_index)
