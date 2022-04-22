@@ -26,7 +26,7 @@ MODEL:
         NAME: IASSD_Backbone
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[512], [256], [128], [64], [-1], [256]]
+            NPOINT_LIST: [[512], [512], [256], [256], [-1], [256]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
@@ -91,7 +91,7 @@ MODEL:
             LOSS_WEIGHTS: {
                 'ins_aware_weight': [0, 1.0, 1.0],
                 'vote_weight': 1.0,
-                'point_cls_weight': 2.0,
+                'point_cls_weight': 1.0,
                 'point_box_weight': 1.0,
                 'corner_weight': 1.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],

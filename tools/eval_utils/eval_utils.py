@@ -126,6 +126,12 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         gt_annos += [gt_dict[id]]
     with open(result_dir / 'gt.pkl', 'wb') as f:
         pickle.dump(gt_annos, f)
+
+    # save frame ids
+    with open(result_dir / 'frame_ids.txt', 'w') as f:
+        for id in frame_ids: 
+            f.write(str(id) + ',')
+
     try:
         result_str, result_dict = dataset.evaluation(
             det_annos, class_names, gt_annos=gt_annos,

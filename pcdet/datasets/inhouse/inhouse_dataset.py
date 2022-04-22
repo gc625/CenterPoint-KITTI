@@ -503,6 +503,8 @@ class inHouseDataset(DatasetTemplate):
         pts_num = data_dict['points'].shape[0]
         gt_num = data_dict['gt_boxes'].shape[0]
         loop_flag = (pts_num < self.resample_pts_num) or (gt_num == 0)
+        if self.training is False:
+            loop_flag = False
         while loop_flag:
             new_index = np.random.randint(self.__len__())
             data_dict = load_item(new_index)
