@@ -4,7 +4,7 @@ import glob
 from itertools import cycle
 import os
 # import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
 from test import repeat_eval_ckpt, eval_single_ckpt
 # from eval_utils import eval_utils

@@ -1,3 +1,4 @@
+from turtle import forward
 from typing import List
 
 import torch
@@ -603,6 +604,192 @@ class PointnetFPModule(nn.Module):
 
         return new_features.squeeze(-1)
 
+
+class AttentiveSAModule(nn.Module):
+    def __init__(self, *,
+                 npoint_list: List[int],
+                 radii: List[float],
+                 nsamples: List[int],
+                 mlps: List[List[int]],                 
+                 use_xyz: bool = True,
+                 dilated_group=False,
+                 pool_method='max_pool',
+                 attention_type='PCT',
+                 pos_encoding=False
+                 ):
+        """
+        :param npoint_list: list of int, number of samples for every sampling type
+        :param radii: list of float, list of radii to group with
+        :param nsamples: list of int, number of samples in each ball query
+        :param mlps: list of list of int, spec of the pointnet before the global pooling for each scale
+        :param use_xyz:
+        :param pool_method: max_pool / avg_pool
+        :param attention_type: point cloud transformer layer
+        :param pos_encoding: whether to use position encoding
+        """
+        super().__init__()
+        assert len(radii) == len(nsamples) == len(mlps)
+
+        self.npoint_list = npoint_list
+        self.groupers = nn.ModuleList()
+        self.mlps = nn.ModuleList()
+        self.dilated_group = dilated_group
+        # out_channels = 0
+
+        self.groupers = self.get_groupers(radii, nsamples, use_xyz, npoint_list)
+        self.xyz_groupers = self.get_groupers(radii, nsamples, False, npoint_list)
+        out_channels = self.get_mlps(radii, mlps, use_xyz) # change Conv2d -> Conv1d
+        self.pool_method = pool_method
+        self.attention_layer = PCT_Layer(out_channels, use_pose_encoding=pos_encoding)
+
+    def get_groupers(self, radii, nsamples, use_xyz, npoint_list):
+        for i in range(len(radii)):
+            radius = radii[i]
+            nsample = nsamples[i]
+            groupers = nn.ModuleList()
+            if self.dilated_group:
+                if i == 0:
+                    min_radius = 0.
+                else:
+                    min_radius = radii[i-1]
+                groupers.append(
+                    pointnet2_utils.QueryDilatedAndGroup(
+                        radius, min_radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+            else:
+                groupers.append(
+                    pointnet2_utils.QueryAndGroup(
+                        radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+            return groupers
+    def get_mlps(self, radii, mlps, use_xyz):
+        out_channels = 0
+        for i in range(len(radii)):
+            mlp_spec = mlps[i]
+            if use_xyz:
+                mlp_spec[0] += 3
+
+            shared_mlps = []
+            for k in range(len(mlp_spec) - 1):
+                shared_mlps.extend([
+                    nn.Conv1d(mlp_spec[k], mlp_spec[k + 1],
+                              kernel_size=1, bias=False),
+                    nn.BatchNorm1d(mlp_spec[k + 1]),
+                    nn.ReLU()
+                ])
+            self.mlps.append(nn.Sequential(*shared_mlps))
+            out_channels += mlp_spec[-1]
+        return out_channels
+        
+    def forward(self, xyz: torch.Tensor, features: torch.Tensor, ctr_xyz: torch.Tensor):
+        """
+        :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
+        :param features: (B, C, N) tensor of the descriptors of the the features
+        :param ctr_xyz: (B, M, 3) tensor of the xyz coordinates of the sampled points
+        :return:
+            new_xyz: (B, npoint, 3) tensor of the new features' xyz
+            new_features: (B, \sum_k(mlps[k][-1]), npoint) tensor of the new_features descriptors
+            cls_features: (B, npoint, num_class) tensor of confidence (classification) features
+        """
+        xyz_transpose = xyz.transpose(1, 2).contiguous()
+        # new_features_list = []
+        new_xyz = ctr_xyz
+        ctr_xyz_transpose = ctr_xyz.transpose(1, 2).contiguous() # (B, 3, M)
+        if len(self.groupers) > 0:
+            
+                # new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
+                # new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
+                # pass through Conv1d mlp first would save computation time
+            new_features = self.mlps[0](features) # features: (B, C, N) -> (B, mlp[i], N)
+            group_features = self.groupers[0](xyz, new_xyz, new_features)  # (B, mlp[i], N, nsample)
+            group_xyz = self.xyz_groupers[0](xyz, new_xyz, xyz_transpose)
+            group_ctr = self.xyz_groupers[0](new_xyz, new_xyz, ctr_xyz_transpose)
+            att_features = self.attention_layer.forward(group_xyz, group_features, group_ctr)
+            # new_features = new_features.squeeze(-1)  # (B, mlp[-1], npoint)
+            if self.pool_method == 'max_pool':
+                att_features = F.max_pool2d(
+                    att_features, kernel_size=[1, att_features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            elif self.pool_method == 'avg_pool':
+                att_features = F.avg_pool2d(
+                    att_features, kernel_size=[1, att_features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            else:
+                raise NotImplementedError
+            att_features = att_features.squeeze(-1) # (B, C, n_ctr)
+        else:
+            raise RuntimeError('empty groupers!')
+
+        return new_xyz, att_features
+
+class transformer_aggregation(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, xyz: torch.tensor, features: torch.tensor, ctr_xyz: torch.tensor):
+        # grouping
+        
+        # calculate attention value
+
+        # calculate 
+        pass
+
+class PCT_Layer(nn.Module):
+    def __init__(self, in_ch, inter_ch=8, use_pose_encoding=False):
+        super().__init__()
+        
+        if use_pose_encoding:
+            self.pose_encoding = nn.Conv1d(3, in_ch)
+            in_feat = in_ch
+        else:
+            self.pose_encoding = None
+            in_feat = in_ch + 3
+        
+        self.conv_q = nn.Conv2d(in_feat, inter_ch, 1, 1, bias=False)
+        self.conv_k = nn.Conv2d(in_feat, inter_ch, 1, 1, bias=False)
+        self.conv_v = nn.Conv2d(in_feat, in_ch, 1, 1, bias=False)
+        self.sm = nn.Softmax(dim=1)
+        self.final_conv = nn.Conv2d(in_ch, in_ch, 1, 1, bias=False)
+        self.bn = nn.BatchNorm1d(in_ch)
+        self.relu = nn.ReLU()
+        
+
+    def forward(self, group_xyz: torch.tensor, group_features: torch.tensor, group_ctr_xyz: torch.tensor):
+        """
+        :param xyz: (B, 3, N, nsample) tensor of the xyz coordinates of the features
+        :param features: (B, C, N, nsample) tensor of the descriptors of the the features
+        "param ctr_xyz: (B, 3, N, nsample) tensor of the xyz coordinates of the centers 
+        :return:
+            new_features: (B, C, N, nsample) tensor of the new_features descriptors
+        """
+
+        relative_pos = group_ctr_xyz - group_xyz
+        if self.pose_encoding is None:
+            ip_feat = torch.cat((group_features, relative_pos), dim=1) # (B, C+3, N, nsample)
+        else:
+            ip_feat = group_features + self.pose_encoding(relative_pos)
+        
+        q = self.conv_q(ip_feat) # (B, C_d, N, nsample)
+        k = self.conv_k(ip_feat)
+        v = self.conv_v(ip_feat) # (B, C, N, nsample)
+        k = torch.transpose(k, 1, 2) # (B, N, C_d, nsample)
+        att_map = torch.einsum('bncm,bcjm->bnjm', k, q) # (B, N, N, nsample)
+
+        att_map = self.sm(att_map)
+
+        # L1 normalize
+        att_map_sum = torch.sum(att_map, dim=2, keepdim=True)
+        att_map = att_map / att_map_sum
+
+        # apply attention
+        att_feat = torch.einsum('bnkm,bcnm->bckm', att_map, v) # (B, C, N, nsample)
+        
+        offset_feat = att_feat - group_features
+        lbr_feat = self.relu(self.bn(self.final_conv(offset_feat))) # LBR
+        result = lbr_feat + group_features
+        return result
 
 if __name__ == "__main__":
     pass

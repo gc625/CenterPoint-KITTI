@@ -7,7 +7,7 @@ import pickle
 from matplotlib.patches import Rectangle as Rec
 import cv2
 
-root_dir = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN/init_fh_xyz_5/eval/eval_with_train')
+root_dir = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD/initial_ctr256/eval/eval_with_train')
 
 frame_ids = root_dir / 'frame_ids.txt'
 frame_ids = np.loadtxt(frame_ids, delimiter=',', dtype=str)

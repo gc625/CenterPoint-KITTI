@@ -456,7 +456,7 @@ class IASSD_Head(PointHeadTemplate):
         else:
             sa_loss_cls = 0
 
-        # cls loss
+        # box cls loss?
         center_loss_cls, tb_dict_4 = self.get_center_cls_layer_loss()
         tb_dict.update(tb_dict_4)
 

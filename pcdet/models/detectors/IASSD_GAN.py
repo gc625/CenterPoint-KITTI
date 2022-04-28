@@ -45,7 +45,8 @@ class IASSD_GAN(Detector3DTemplate):
             loss, tb_dict, disp_dict = self.get_training_loss()
             transfer_loss = self.get_transfer_loss(batch_dict)
             disp_dict['det_loss'] = loss.item()
-            loss += 0.1 * transfer_loss
+            loss = (transfer_loss + loss) / 2
+            
 
             ret_dict = {
                 'loss': loss,
@@ -82,8 +83,8 @@ class IASSD_GAN(Detector3DTemplate):
         rec_loss = (rec_lidar_loss + rec_radar_loss)/2
         
         # matching loss
-        self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 3)
-        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 3) # this should result the one and only result
+        self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
+        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should result the one and only result
         mask = mask.unsqueeze(-1).unsqueeze(-1)
         self_feat = df.index_points_group(radar_shared_feat, self_idx)
         cross_feat = df.index_points_group(lidar_shared_feat, cross_idx)
@@ -99,7 +100,7 @@ class IASSD_GAN(Detector3DTemplate):
             raise RuntimeError
         matching_loss = nn.functional.mse_loss(self_pts, cross_pts, reduction='mean')        
 
-        cross_over_loss = (rec_loss + 10 * matching_loss)/2
+        cross_over_loss = (rec_loss + matching_loss)/2
 
         return cross_over_loss
 
@@ -181,7 +182,7 @@ class IASSD_GAN(Detector3DTemplate):
             share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
             share_head_dict = self.shared_head(share_head_dict)
             share_head_loss, _ = self.shared_head.get_loss(share_head_dict)
-            transfer_loss = share_head_loss + cross_over_loss
+            transfer_loss = (share_head_loss + cross_over_loss)/2
             
 
         return transfer_loss
@@ -302,8 +303,8 @@ class feat_gan(nn.Module):
             # print(bat_feat.shape)
 
             # find correspondence
-            bat_idx, _ = df.ball_point(1, bat_xyz, bat_xyz, 3)
-            att_idx, mask = df.ball_point(1, att_xyz, bat_xyz, 3)
+            bat_idx, _ = df.ball_point(1, bat_xyz, bat_xyz, 1)
+            att_idx, mask = df.ball_point(1, att_xyz, bat_xyz, 1)
             # print(mask.sum())
             # test = index_points(att_xyz, att_idx)
             group_att_feat = df.index_points_group(att_feat, att_idx) # [B, N, k, C]

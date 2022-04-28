@@ -162,32 +162,32 @@ class IASSD_Backbone(nn.Module):
         
         
         ###save per frame 
-        if self.model_cfg.SA_CONFIG.get('SAVE_SAMPLE_LIST',False) and not self.training:  
-            import numpy as np 
-            # result_dir = np.load('/home/yifan/tmp.npy', allow_pickle=True)
-            result_dir = pathlib.Path('/root/dj/code/CenterPoint-KITTI/output/sample_result_radar')
-            for i in range(batch_size)  :
-                # i=0      
-                # point_saved_path = '/home/yifan/tmp'
-                point_saved_path = result_dir / 'sample_list_save'
-                os.makedirs(point_saved_path, exist_ok=True)
-                idx = batch_dict['frame_id'][i]
-                xyz_list = []
-                gt = batch_dict['gt_boxes'][i].cpu().numpy()
-                for sa_xyz in encoder_xyz:
-                    xyz_list.append(sa_xyz[i].cpu().numpy()) 
-                idx = str(idx)
-                if '/' in idx: # Kitti_tracking
-                    sample_xyz = point_saved_path / idx.split('/')[0] / ('sample_list_' + ('%s' % idx.split('/')[1]) + '_xyz')
-                    sample_gt = point_saved_path / idx.split('/')[0] / ('sample_list_' + ('%s' % idx.split('/')[1]) + '_gt')
-                    os.makedirs(point_saved_path / idx.split('/')[0], exist_ok=True)
+        # if self.model_cfg.SA_CONFIG.get('SAVE_SAMPLE_LIST',False) and not self.training:  
+        #     import numpy as np 
+        #     # result_dir = np.load('/home/yifan/tmp.npy', allow_pickle=True)
+        #     result_dir = pathlib.Path('/root/dj/code/CenterPoint-KITTI/output/sample_result_radar')
+        #     for i in range(batch_size)  :
+        #         # i=0      
+        #         # point_saved_path = '/home/yifan/tmp'
+        #         point_saved_path = result_dir / 'sample_list_save'
+        #         os.makedirs(point_saved_path, exist_ok=True)
+        #         idx = batch_dict['frame_id'][i]
+        #         xyz_list = []
+        #         gt = batch_dict['gt_boxes'][i].cpu().numpy()
+        #         for sa_xyz in encoder_xyz:
+        #             xyz_list.append(sa_xyz[i].cpu().numpy()) 
+        #         idx = str(idx)
+        #         if '/' in idx: # Kitti_tracking
+        #             sample_xyz = point_saved_path / idx.split('/')[0] / ('sample_list_' + ('%s' % idx.split('/')[1]) + '_xyz')
+        #             sample_gt = point_saved_path / idx.split('/')[0] / ('sample_list_' + ('%s' % idx.split('/')[1]) + '_gt')
+        #             os.makedirs(point_saved_path / idx.split('/')[0], exist_ok=True)
 
-                else:
-                    sample_xyz = point_saved_path / ('sample_list_' + ('%s' % idx) + '_xyz')
-                    sample_gt = point_saved_path / ('sample_list_' + ('%s' % idx) + '_gt')
+        #         else:
+        #             sample_xyz = point_saved_path / ('sample_list_' + ('%s' % idx) + '_xyz')
+        #             sample_gt = point_saved_path / ('sample_list_' + ('%s' % idx) + '_gt')
                 
-                np.save(str(sample_gt), gt)
-                np.save(str(sample_xyz), xyz_list)
+        #         np.save(str(sample_gt), gt)
+        #         np.save(str(sample_xyz), xyz_list)
 
                 # np.save(str(new_file), point_new.detach().cpu().numpy())
         

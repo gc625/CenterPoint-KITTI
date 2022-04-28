@@ -34,11 +34,11 @@ DATA_AUGMENTOR:
               - inhouse_dbinfos_train.pkl
           PREPARE: {
             #  filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
-            filter_by_min_points: ['Car:1'],
+            filter_by_min_points: ['Car:1', 'Truck:1'],
              filter_by_difficulty: [10],
           }
 
-          SAMPLE_GROUPS: ['Car:0'] # disable gt sampling
+          SAMPLE_GROUPS: ['Car:0', 'Truck:0'] # disable gt sampling
           NUM_POINT_FEATURES: 6
           DATABASE_WITH_FAKELIDAR: False
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
