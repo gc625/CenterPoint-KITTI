@@ -10,6 +10,7 @@ from .IASSD import IASSD
 from .detectorX_template import DetectorX_template
 from .IASSD_X import IASSD_X
 from .IASSD_GAN import IASSD_GAN
+from .point_3DSSD import Point3DSSD
 
 __all__ = {
     'Detector3DTemplate': Detector3DTemplate,
@@ -23,7 +24,8 @@ __all__ = {
     'CenterPointRCNN': CenterPointRCNN,
     'IASSD': IASSD,
     'IASSDX': IASSD_X,
-    'IASSDGAN': IASSD_GAN
+    'IASSDGAN': IASSD_GAN,
+    '3DSSD': Point3DSSD
 }
 
 

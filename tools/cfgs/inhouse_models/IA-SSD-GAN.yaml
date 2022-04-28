@@ -1,4 +1,4 @@
-CLASS_NAMES: ['Car']
+CLASS_NAMES: ['Car', 'Truck']
 
 DATA_CONFIG:
     _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/inhouse_radar_point_based_gan.yaml
@@ -28,7 +28,7 @@ USE_ATTACH: True
 MODEL:
     NAME: IASSDGAN
     ATTACH_NETWORK:
-        CKPT_FILE: "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-lidar/init/ckpt/checkpoint_epoch_21.pth"
+        CKPT_FILE: "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-lidar-2cls/init/ckpt/checkpoint_epoch_23.pth"
         BACKBONE_3D:
             NAME: IASSD_Backbone
             SA_CONFIG:

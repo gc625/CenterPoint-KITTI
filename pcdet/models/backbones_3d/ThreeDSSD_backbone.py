@@ -48,7 +48,7 @@ class SSDBackbone(nn.Module):
                 )
 
             elif self.layer_types[k] == 'Vote_Layer':
-                self.SA_modules.append(pointnet2_modules.Vote_layer(mlp_list=self.model_cfg.SA_CONFIG.MLPS[k],
+                self.SA_modules.append(pointnet2_modules.Vote_layer3DSSD(mlp_list=self.model_cfg.SA_CONFIG.MLPS[k],
                                                                     pre_channel=channel_out_list[self.layer_inputs[k]],
                                                                     max_translate_range=self.max_translate_range))
 

@@ -1,3 +1,4 @@
+from turtle import forward
 import torch
 import torch.nn as nn
 import os # for debug
@@ -25,4 +26,13 @@ class ClusterBackbone(nn.Module):
 
         pass
 
-        
+class PointFeatureExtractor(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self):
+        pass
+
+
+
+
