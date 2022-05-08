@@ -25,7 +25,8 @@ class Detector3DTemplate(nn.Module):
         self.num_class = num_class
 
         # make compatible to IASSD
-        self.model_cfg.BACKBONE_3D['num_class'] = self.num_class
+        if self.model_cfg.get('BACKBONE_3D', False):
+            self.model_cfg.BACKBONE_3D['num_class'] = self.num_class
 
         self.dataset = dataset
         self.class_names = dataset.class_names

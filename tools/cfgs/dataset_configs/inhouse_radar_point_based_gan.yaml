@@ -1,8 +1,8 @@
 DATASET: 'inHouseDataset'
 # DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
-DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
+# DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
 # DATA_PATH: '/root/data/public/shangqi/radar_test/kitti_format'
-
+DATA_PATH: '/root/data/public/shangqi/data_0401/radar/kitti_format'
 # POINT_CLOUD_RANGE: [0, -40, -2, 70.4, 40, 3]
 # some radar points may locate at x < 0
 POINT_CLOUD_RANGE: [0, -40, -2, 70, 40, 3]

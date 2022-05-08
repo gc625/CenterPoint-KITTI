@@ -12,7 +12,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-
+import time
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
 from pcdet.models import build_network, model_fn_decorator
@@ -23,14 +23,14 @@ from train_utils.train_utils import train_model
 
 def parse_config():
     parser = argparse.ArgumentParser(description='arg parser')
-    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/centerpoint_radar_car.yaml', help='specify the config for training')
+    parser.add_argument('--cfg_file', type=str, default='/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/RaDetSSDv2.yaml', help='specify the config for training')
 
-    parser.add_argument('--batch_size', type=int, default=1, required=False, help='batch size for training')
+    parser.add_argument('--batch_size', type=int, default=16, required=False, help='batch size for training')
     parser.add_argument('--epochs', type=int, default=1, required=False, help='number of epochs to train for')
     parser.add_argument('--workers', type=int, default=1, help='number of workers for dataloader')
-    parser.add_argument('--extra_tag', type=str, default='server_debug', help='extra tag for this experiment')
+    parser.add_argument('--extra_tag', type=str, default='initial_pct_0401', help='extra tag for this experiment')
     parser.add_argument('--ckpt', type=str, default='/root/dj/code/CenterPoint-KITTI/output/centerpoint_radar_car/no_aug/ckpt/checkpoint_epoch_13.pth', help='checkpoint to start from')
-    parser.add_argument('--pretrained_model', type=str, default=None, help='pretrained_model')
+    parser.add_argument('--pretrained_model', type=str, default='/root/dj/code/CenterPoint-KITTI/output/RaDetSSDv2/initial_pct_0401/ckpt/checkpoint_epoch_20.pth', help='pretrained_model')
     parser.add_argument('--launcher', choices=['none', 'pytorch', 'slurm'], default='none')
     parser.add_argument('--tcp_port', type=int, default=18888, help='tcp port for distrbuted training')
     parser.add_argument('--sync_bn', action='store_true', default=False, help='whether to use sync bn')

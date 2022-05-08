@@ -79,6 +79,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     logger.info('*************** Performance of EPOCH %s *****************' % epoch_id)
     sec_per_example = (time.time() - start_time) / len(dataloader.dataset)
+    peak_memory = torch.cuda.max_memory_allocated() / 1024 # convert to KByte
+    
+    logger.info('Peak memory usage: %.4f KB.' % peak_memory)
+    peak_memory = peak_memory/1024 # convert to MByte
+    logger.info('Peak memory usage: %.4f MB.' % peak_memory)
     logger.info('Generate label finished(sec_per_example: %.4f second).' % sec_per_example)
 
     if cfg.LOCAL_RANK != 0:

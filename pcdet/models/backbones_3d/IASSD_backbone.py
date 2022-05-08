@@ -80,7 +80,25 @@ class IASSD_Backbone(nn.Module):
                                                                     max_translate_range=self.max_translate_range
                                                                     )
                                        )
-
+            elif self.layer_types[k] == 'PCT_Layer':
+                mlps = self.model_cfg.SA_CONFIG.MLPS[k].copy()
+                try:
+                    for idx in range(mlps.__len__()):
+                        mlps[idx] = [channel_in] + mlps[idx]
+                except:
+                    pass
+                self.SA_modules.append(
+                    pointnet2_modules.AttentiveSAModule(
+                        npoint_list=self.model_cfg.SA_CONFIG.NPOINT_LIST[k],
+                        radii=self.model_cfg.SA_CONFIG.RADIUS_LIST[k],
+                        nsamples=self.model_cfg.SA_CONFIG.NSAMPLE_LIST[k],
+                        mlps=mlps,
+                        use_xyz=True,
+                        out_channel=self.model_cfg.SA_CONFIG.AGGREGATION_MLPS[k][0]
+                    )
+                )
+            
+                channel_out = self.model_cfg.SA_CONFIG.AGGREGATION_MLPS[k][0]
             channel_out_list.append(channel_out)
 
         self.num_point_features = channel_out
@@ -134,7 +152,10 @@ class IASSD_Backbone(nn.Module):
                 centers_origin = xyz_select
                 center_origin_batch_idx = batch_idx.view(batch_size, -1)[:, :centers_origin.shape[1]]
                 encoder_coords.append(torch.cat([center_origin_batch_idx[..., None].float(),centers_origin.view(batch_size, -1, 3)],dim =-1))
-                    
+            elif self.layer_types[i] == 'PCT_Layer': # final layer
+                ctr_xyz = encoder_xyz[self.ctr_idx_list[i]] if self.ctr_idx_list[i] != -1 else None
+                li_xyz, li_features = self.SA_modules[i](xyz_input, feature_input, ctr_xyz)
+                li_cls_pred = None
             encoder_xyz.append(li_xyz)
             li_batch_idx = batch_idx.view(batch_size, -1)[:, :li_xyz.shape[1]]
             encoder_coords.append(torch.cat([li_batch_idx[..., None].float(),li_xyz.view(batch_size, -1, 3)],dim =-1))
@@ -142,6 +163,7 @@ class IASSD_Backbone(nn.Module):
             if li_cls_pred is not None:
                 li_cls_batch_idx = batch_idx.view(batch_size, -1)[:, :li_cls_pred.shape[1]]
                 sa_ins_preds.append(torch.cat([li_cls_batch_idx[..., None].float(),li_cls_pred.view(batch_size, -1, li_cls_pred.shape[-1])],dim =-1)) 
+                pass
             else:
                 sa_ins_preds.append([])
            

@@ -18,40 +18,63 @@ DATA_CONFIG:
                 'train': True,
                 'test': False
             }
-FREEZE_MODE: backbone
+# FREEZE_MODE: backbone
 MODEL:
-    NAME: IASSD
+    NAME: RaDet
      
     BACKBONE_3D:
-        NAME: IASSD_Backbone
-        SA_CONFIG:
-            # Sampling setting:
-            NPOINT_LIST: [[512], [512], [512], [128], [-1], [128]]
-            SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
-            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+        NAME: RaDetBackbone
+        SAVE_SAMPLED: True
+        EXTRACTOR_CONFIG:
+            NPOINTS: [[512], [512], [512]]
+            FPS_RANGE: [[-1], [-1], [-1], [-1], [-1], [-1]]
+            FPS_TYPE: [['D-FPS'], ['D-FPS'], ['D-FPS']]
             # Group and Abstraction setting:
-            RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
-            NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            
-            MLPS: [[[16,16,32],  [32,32,64]],
-                   [[64,64,128],  [64,96,128]],
-                   [[128,128,256],  [128,256,256]],
-                   [],
-                   [128],
-                   [[256,256,512], [256,512,1024]]]
+            RADIUS: [[0.4,0.8], [0.8, 1.6], [1.6, 3.2]]
+            NSAMPLE: [[16,16], [16,32], [16,32]]            
+            MLPS: [
+                    [[16,16,32],  [32,32,64]],
+                    [[64,64,128],  [64,96,128]],
+                    [[128, 192, 256], [128, 192, 256]]
+                   ]
             
-            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer', 'SA_Layer']
-            DILATED_GROUP: [False, False, False, False, False, False]            
-            AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
-            # Instance-aware setting:
-            CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
-
-            LAYER_INPUT: [0, 1, 2, 3, 4, 3]
-            CTR_INDEX: [-1, -1, -1, -1, -1, 5]
-            MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
-            SAVE_SAMPLE_LIST: True
+            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer']
+            DILATED_GROUP: [False, False, False]            
+            AGGREATION_CHANNEL: [64, 128, 256]
+            LAYER_INPUT: [0, 1, 2]
+        SEG_CONFIG:
+            MLPS: [128]
+            FG_NPOINTS: 128
+        VOTE_CONFIG:
+            MLPS: []
+            MAX_TRANSLATE_RANGE: [-3.0, -2.0, -3.0]
+        AGGREGATION_CONFIG:
+            USE_GLOBAL_FEAT: False
+            USE_ORIGINAL_POINT: False
+            ORIGINAL_POINT:
+                SAMPLER: 'D-FPS'
+                SAMPLE_POINT: 128
+            CENTER_POINT:
+                SAMPLER: 'D-FPS'
+                SAMPLE_POINT: 64
+            NPOINTS: [[128]]
+            FPS_RANGE: [[-1]]
+            FPS_TYPE: [['D-FPS']]
+            # Group and Abstraction setting:
+            RADIUS: [[4.8, 6.4]]
+            NSAMPLE: [[32, 32]]            
+            MLPS: [
+                    [[256,256,512],[256, 512, 512]]
+                   ]
+            
+            LAYER_TYPE: ['SA_Layer']
+            DILATED_GROUP: [False]
+            AGGREATION_CHANNEL: [512]
+            LAYER_INPUT: [0]
 
     POINT_HEAD:
-        NAME: IASSD_Head
+        NAME: RaDetHead
+        INPUT_DIM: 512
         CLS_FC: [256, 256]
         REG_FC: [256, 256]
         CLASS_AGNOSTIC: False
@@ -69,7 +92,7 @@ MODEL:
             BOX_CODER: PointResidual_BinOri_Coder # 'PointBinResidualCoder', 'PointResidual_BinOri_Coder' 
             BOX_CODER_CONFIG: {
                 'angle_bin_num': 12,
-                'use_mean_size': True,                
+                'use_mean_size': False,                
                 'mean_size': [
                     [3.9, 1.6, 1.56],
                     [0.8, 0.6, 1.73],
@@ -78,18 +101,23 @@ MODEL:
             }
 
         LOSS_CONFIG:
+            EASY_SAMPLE: False
             # Ref: 'WeightedBinaryCrossEntropy', 'WeightedCrossEntropy', 'FocalLoss'
             LOSS_CLS: WeightedCrossEntropy
             LOSS_REG: WeightedSmoothL1Loss
             LOSS_INS: WeightedCrossEntropy
-            SAMPLE_METHOD_LIST: *sample_method_list
             LOSS_VOTE_TYPE: 'none'  #'none', 'ver1', 'ver2', 
-
+            PERCENT:
+                SEG_LOSS: 0.5
+                SEG_POS_NUM: 160
+                CTR_REG: 0.5
+                CTR_CLS: 0.5
+                BOX_REG: 0.5
             CORNER_LOSS_REGULARIZATION: True
             CENTERNESS_REGULARIZATION: True
             CENTERNESS_REGULARIZATION_SA: True
             LOSS_WEIGHTS: {
-                'ins_aware_weight': [0, 1.0, 1.0],
+                'seg_weight': 1.0,
                 'vote_weight': 1.0,
                 'point_cls_weight': 1.0,
                 'point_box_weight': 1.0,

@@ -165,7 +165,8 @@ class PointHeadBox3DSSD(PointHeadTemplate):
 
         # point_loss = point_loss_cls + point_loss_box + center_loss_reg + center_loss_cls + center_loss_box
         point_loss = center_loss_reg + center_loss_cls + center_loss_box + corner_loss
-
+        if torch.isnan(point_loss) or torch.isinf(point_loss):
+            print('sth wrong here')
         # tb_dict.update(tb_dict_1)
         # tb_dict.update(tb_dict_2)
         tb_dict.update(tb_dict_3)
@@ -384,12 +385,6 @@ class PointHeadBox3DSSD(PointHeadTemplate):
         if not self.training or self.predict_boxes_when_training or \
                 self.model_cfg.LOSS_CONFIG.CORNER_LOSS_REGULARIZATION or \
                 self.model_cfg.LOSS_CONFIG.CENTERNESS_REGULARIZATION:
-
-            # point_cls_preds, point_box_preds = self.generate_predicted_boxes(
-            #     points=batch_dict['point_coords'][:, 1:4],
-            #     point_cls_preds=point_cls_preds, point_box_preds=point_box_preds
-            # )
-
 
             point_cls_preds, point_box_preds = self.generate_predicted_boxes(
                     points=batch_dict['centers'][:, 1:4],

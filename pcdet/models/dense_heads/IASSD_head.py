@@ -765,9 +765,9 @@ class IASSD_Head(PointHeadTemplate):
         if tb_dict is None:
             tb_dict = {}
         tb_dict.update({'center_loss_box': point_loss_box.item()})
-        tb_dict.update({'center_loss_box_xyzwhl': point_loss_xyzwhl.item()})
-        tb_dict.update({'center_loss_box_ori_bin': loss_ori_cls.item()})
-        tb_dict.update({'center_loss_box_ori_res': loss_ori_reg.item()})
+        # tb_dict.update({'center_loss_box_xyzwhl': point_loss_xyzwhl.item()})
+        # tb_dict.update({'center_loss_box_ori_bin': loss_ori_cls.item()})
+        # tb_dict.update({'center_loss_box_ori_res': loss_ori_reg.item()})
         return point_loss_box, tb_dict
 
 

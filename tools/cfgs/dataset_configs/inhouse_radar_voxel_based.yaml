@@ -4,12 +4,12 @@ POINT_CLOUD_RANGE: [0, -40, -2, 70, 40, 3]
 
 DATA_SPLIT: {
     'train': train,
-    'test': val
+    'test': test
 }
 
 INFO_PATH: {
     'train': [inhouse_infos_train.pkl],
-    'test': [inhouse_infos_val.pkl],
+    'test': [inhouse_infos_test.pkl],
 }
 
 # FOV_POINTS_ONLY: True
@@ -29,24 +29,24 @@ DATA_AUGMENTOR:
               - inhouse_dbinfos_train.pkl
           PREPARE: {
             #  filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
-            filter_by_min_points: ['Car:5'],
+            filter_by_min_points: ['Car:0'],
              filter_by_difficulty: [10],
           }
 
-          SAMPLE_GROUPS: ['Car:20']
+          SAMPLE_GROUPS: ['Car:0']
           NUM_POINT_FEATURES: 6
           DATABASE_WITH_FAKELIDAR: False
           REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
           LIMIT_WHOLE_SCENE: True
 
-        - NAME: random_world_flip
-          ALONG_AXIS_LIST: ['x']
+        # - NAME: random_world_flip
+        #   ALONG_AXIS_LIST: ['x']
 
-        - NAME: random_world_rotation
-          WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
+        # - NAME: random_world_rotation
+        #   WORLD_ROT_ANGLE: [-0.78539816, 0.78539816]
 
-        - NAME: random_world_scaling
-          WORLD_SCALE_RANGE: [0.95, 1.05]
+        # - NAME: random_world_scaling
+        #   WORLD_SCALE_RANGE: [0.95, 1.05]
 
 
 POINT_FEATURE_ENCODING: {

@@ -58,7 +58,7 @@ class _PointnetSAModuleBase(nn.Module):
         if new_xyz is None:
             new_xyz = pointnet2_utils.gather_operation(
                 xyz_flipped,
-                pointnet2_utils.farthest_point_sample(xyz, self.npoint)
+                pointnet2_utils.furthest_point_sample(xyz, self.npoint)
             ).transpose(1, 2).contiguous() if self.npoint is not None else None
 
         for i in range(len(self.groupers)):
@@ -100,7 +100,7 @@ class PointnetSAModuleMSG(_PointnetSAModuleBase):
 
         assert len(radii) == len(nsamples) == len(mlps)
 
-        self.npoint = npoint
+        self.npoint = npoint[0]
         self.groupers = nn.ModuleList()
         self.mlps = nn.ModuleList()
         for i in range(len(radii)):
@@ -183,6 +183,7 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
                 nn.ReLU()
             ])
             self.out_aggregation = nn.Sequential(*shared_mlps)
+            pass
 
     def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, new_xyz=None, ctr_xyz=None) -> (torch.Tensor, torch.Tensor):
         """
@@ -263,6 +264,67 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
             new_features = pointnet2_utils.gather_operation(features, fps_idxes).contiguous()
 
         return new_xyz, new_features
+
+
+class FPSampler():
+    def __init__(self, npoint, fps_type) -> None:
+        self.npoint = npoint
+        self.fps_type = fps_type
+        
+    def sample(self, xyz: torch.Tensor, features: torch.Tensor = None):
+        """
+        :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
+        :param features: (B, C, N) tensor of the descriptors of the the features
+        :param npoint: number of sampled points
+        :param type: FPS type, option: D-FPS, F-FPS
+        """
+        npoint = self.npoint
+        fps_type = self.fps_type
+
+        features = features.contiguous()
+
+        xyz_flipped = xyz.transpose(1, 2).contiguous()
+        last_fps_end_index = 0
+        # npoint = 1
+        xyz_tmp = xyz[:, last_fps_end_index:, :]
+        feature_tmp = features.transpose(1, 2)[:, last_fps_end_index:, :]
+        if fps_type == 'D-FPS':
+            fps_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+        elif fps_type == 'F-FPS':
+            features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+            features_for_fps_distance = SSD.calc_square_dist(features_SSD, features_SSD)
+            features_for_fps_distance = features_for_fps_distance.contiguous()
+            fps_idx = pointnet2_3DSSD.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+        new_xyz = pointnet2_utils.gather_operation(
+                xyz_flipped, fps_idx
+            ).transpose(1, 2).contiguous() if npoint is not None else None # (B, N, 3)
+        return new_xyz, fps_idx
+
+def FPS(xyz: torch.Tensor, features: torch.Tensor = None, npoint=None, fps_type='D-FPS'):
+    """
+        :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
+        :param features: (B, C, N) tensor of the descriptors of the the features
+        :param npoint: number of sampled points
+        :param type: FPS type, option: D-FPS, F-FPS
+    """
+    features = features.contiguous()
+
+    xyz_flipped = xyz.transpose(1, 2).contiguous()
+    last_fps_end_index = 0
+    # npoint = 1
+    xyz_tmp = xyz[:, last_fps_end_index:, :]
+    feature_tmp = features.transpose(1, 2)[:, last_fps_end_index:, :]
+    if fps_type == 'D-FPS':
+        fps_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+    elif fps_type == 'F-FPS':
+        features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+        features_for_fps_distance = SSD.calc_square_dist(features_SSD, features_SSD)
+        features_for_fps_distance = features_for_fps_distance.contiguous()
+        fps_idx = pointnet2_3DSSD.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+    new_xyz = pointnet2_utils.gather_operation(
+            xyz_flipped, fps_idx
+        ).transpose(1, 2).contiguous() if npoint is not None else None # (B, N, 3)
+    return new_xyz, fps_idx
 
 class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
     """Pointnet set abstraction layer with specific downsampling and multiscale grouping """
@@ -552,9 +614,8 @@ class Vote_layer3DSSD(nn.Module):
     def __init__(self, mlp_list, pre_channel, max_translate_range):
         super().__init__()
         self.mlp_list = mlp_list
+        shared_mlps = []
         for i in range(len(mlp_list)):
-            shared_mlps = []
-
             shared_mlps.extend([
                 nn.Conv1d(pre_channel, mlp_list[i], kernel_size=1, bias=False),
                 nn.BatchNorm1d(mlp_list[i]),
@@ -780,12 +841,13 @@ class AttentiveSAModule(nn.Module):
                  npoint_list: List[int],
                  radii: List[float],
                  nsamples: List[int],
+                 out_channel = -1, 
                  mlps: List[List[int]],                 
                  use_xyz: bool = True,
                  dilated_group=False,
                  pool_method='max_pool',
                  attention_type='PCT',
-                 pos_encoding=False
+                 pos_encoding=False,
                  ):
         """
         :param npoint_list: list of int, number of samples for every sampling type
@@ -798,6 +860,9 @@ class AttentiveSAModule(nn.Module):
         :param pos_encoding: whether to use position encoding
         """
         super().__init__()
+        print(radii)
+        print(nsamples)
+        print(mlps)
         assert len(radii) == len(nsamples) == len(mlps)
 
         self.npoint_list = npoint_list
@@ -810,9 +875,24 @@ class AttentiveSAModule(nn.Module):
         self.xyz_groupers = self.get_groupers(radii, nsamples, False, npoint_list)
         out_channels = self.get_mlps(radii, mlps, use_xyz) # change Conv2d -> Conv1d
         self.pool_method = pool_method
-        self.attention_layer = PCT_Layer(out_channels, use_pose_encoding=pos_encoding)
+        if attention_type == 'PCT':
+            self.attention_layer = PCT_Layer(out_channels, use_pose_encoding=pos_encoding)
+        else:
+            raise NotImplementedError
+        if out_channel != -1 and len(self.mlps) > 0:
+            in_channel = 0
+            for mlp_tmp in mlps:
+                in_channel += mlp_tmp[-1]
+            shared_mlps = []
+            shared_mlps.extend([
+                nn.Conv1d(in_channel, out_channel, kernel_size=1, bias=False),
+                nn.BatchNorm1d(out_channel),
+                nn.ReLU()
+            ])
+            self.out_aggregation = nn.Sequential(*shared_mlps)
 
     def get_groupers(self, radii, nsamples, use_xyz, npoint_list):
+        use_xyz = False # disable use_xyz
         for i in range(len(radii)):
             radius = radii[i]
             nsample = nsamples[i]
@@ -867,12 +947,13 @@ class AttentiveSAModule(nn.Module):
         # new_features_list = []
         new_xyz = ctr_xyz
         ctr_xyz_transpose = ctr_xyz.transpose(1, 2).contiguous() # (B, 3, M)
+        features_input = torch.cat((xyz_transpose, features), dim=1)
         if len(self.groupers) > 0:
             
                 # new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
                 # new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
                 # pass through Conv1d mlp first would save computation time
-            new_features = self.mlps[0](features) # features: (B, C, N) -> (B, mlp[i], N)
+            new_features = self.mlps[0](features_input) # features: (B, C, N) -> (B, mlp[i], N)
             group_features = self.groupers[0](xyz, new_xyz, new_features)  # (B, mlp[i], N, nsample)
             group_xyz = self.xyz_groupers[0](xyz, new_xyz, xyz_transpose)
             group_ctr = self.xyz_groupers[0](new_xyz, new_xyz, ctr_xyz_transpose)
@@ -891,6 +972,8 @@ class AttentiveSAModule(nn.Module):
             att_features = att_features.squeeze(-1) # (B, C, n_ctr)
         else:
             raise RuntimeError('empty groupers!')
+        
+        att_features = self.out_aggregation(att_features)
 
         return new_xyz, att_features
 
@@ -922,7 +1005,7 @@ class PCT_Layer(nn.Module):
         self.conv_v = nn.Conv2d(in_feat, in_ch, 1, 1, bias=False)
         self.sm = nn.Softmax(dim=1)
         self.final_conv = nn.Conv2d(in_ch, in_ch, 1, 1, bias=False)
-        self.bn = nn.BatchNorm1d(in_ch)
+        self.bn = nn.BatchNorm2d(in_ch)
         self.relu = nn.ReLU()
         
 
@@ -950,8 +1033,8 @@ class PCT_Layer(nn.Module):
         att_map = self.sm(att_map)
 
         # L1 normalize
-        att_map_sum = torch.sum(att_map, dim=2, keepdim=True)
-        att_map = att_map / att_map_sum
+        att_map_sum = torch.sum(att_map, dim=1, keepdim=True)
+        att_map = att_map / (att_map_sum + 1e-9) 
 
         # apply attention
         att_feat = torch.einsum('bnkm,bcnm->bckm', att_map, v) # (B, C, N, nsample)

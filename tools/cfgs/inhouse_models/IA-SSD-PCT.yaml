@@ -26,27 +26,29 @@ MODEL:
         NAME: IASSD_Backbone
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[512], [512], [512], [128], [-1], [128]]
+            NPOINT_LIST: [[512], [512], [512], [128], [-1], [128], [128]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
-            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], [], []]
             # Group and Abstraction setting:
-            RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
-            NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            
+            RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4], [6.4]]
+            NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32], [16]]            
             MLPS: [[[16,16,32],  [32,32,64]],
                    [[64,64,128],  [64,96,128]],
                    [[128,128,256],  [128,256,256]],
                    [],
                    [128],
-                   [[256,256,512], [256,512,1024]]]
+                   [[256,256,512], [256,512,1024]],
+                   [[512]]
+                   ]
             
-            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer', 'SA_Layer']
-            DILATED_GROUP: [False, False, False, False, False, False]            
-            AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
+            LAYER_TYPE: ['SA_Layer', 'SA_Layer', 'SA_Layer', 'SA_Layer', 'Vote_Layer', 'SA_Layer', 'PCT_Layer']
+            DILATED_GROUP: [False, False, False, False, False, False]
+            AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512], [512]]
             # Instance-aware setting:
-            CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
+            CONFIDENCE_MLPS: [[], [128], [256], [], [], [], []]
 
-            LAYER_INPUT: [0, 1, 2, 3, 4, 3]
-            CTR_INDEX: [-1, -1, -1, -1, -1, 5]
+            LAYER_INPUT: [0, 1, 2, 3, 4, 3, 6]
+            CTR_INDEX: [-1, -1, -1, -1, -1, 5, 5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
             SAVE_SAMPLE_LIST: True
 
