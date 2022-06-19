@@ -22,6 +22,8 @@ class KittiDataset(DatasetTemplate):
         super().__init__(
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
+        print(f'ROOT PATH: {self.root_path}')
+        
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
         self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
 
@@ -73,8 +75,8 @@ class KittiDataset(DatasetTemplate):
 
 
     def get_image_shape(self, idx):
-        img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
-        assert img_file.exists()
+        img_file = self.root_split_path / 'image_2' / ('%s.jpg' % idx)
+        assert img_file.exists(), f"failed on {idx}, img file = {img_file}"
         return np.array(io.imread(img_file).shape[:2], dtype=np.int32)
 
     def get_label(self, idx):
@@ -447,12 +449,15 @@ if __name__ == '__main__':
         isRad = 'radar' in sys.argv[2]
         
 
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
-        ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
+        print('====> print %s' % sys.argv[2])
+        dataset_cfg = EasyDict(yaml.safe_load(open(sys.argv[2])))
+        ROOT_DIR = Path(dataset_cfg['DATA_PATH'])
+        # ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
+        # print(ROOT_DIR)
         create_kitti_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Car', 'Pedestrian', 'Cyclist'],
-            data_path=ROOT_DIR / 'data' / 'kitti',
-            save_path=ROOT_DIR / 'data' / 'kitti',
+            data_path=ROOT_DIR,
+            save_path=ROOT_DIR,
             is_radar = isRad
         )
