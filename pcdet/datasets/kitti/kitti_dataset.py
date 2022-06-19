@@ -10,7 +10,7 @@ from ..dataset import DatasetTemplate
 
 
 class KittiDataset(DatasetTemplate):
-    def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
+    def __init__(self, dataset_cfg, class_names, is_radar, training=True, root_path=None, logger=None):
         """
         Args:
             root_path:
@@ -30,6 +30,8 @@ class KittiDataset(DatasetTemplate):
 
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
+
+        self.is_radar = is_radar
 
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -63,6 +65,12 @@ class KittiDataset(DatasetTemplate):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
         return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+
+    def get_radar(self, idx):
+        lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
+        assert lidar_file.exists()
+        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+
 
     def get_image_shape(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.png' % idx)
@@ -122,7 +130,10 @@ class KittiDataset(DatasetTemplate):
         def process_single_scene(sample_idx):
             print('%s sample_idx: %s' % (self.split, sample_idx))
             info = {}
-            pc_info = {'num_features': 4, 'lidar_idx': sample_idx}
+            if self.is_radar:
+                pc_info = {'num_features': 7, 'lidar_idx': sample_idx}
+            else:
+                pc_info = {'num_features': 4, 'lidar_idx': sample_idx}
             info['point_cloud'] = pc_info
 
             image_info = {'image_idx': sample_idx, 'image_shape': self.get_image_shape(sample_idx)}
@@ -169,7 +180,9 @@ class KittiDataset(DatasetTemplate):
                 info['annos'] = annotations
 
                 if count_inside_pts:
-                    points = self.get_lidar(sample_idx)
+                    
+                    points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx) 
+                        
                     calib = self.get_calib(sample_idx)
                     pts_rect = calib.lidar_to_rect(points[:, 0:3])
 
@@ -206,7 +219,7 @@ class KittiDataset(DatasetTemplate):
             print('gt_database sample: %d/%d' % (k + 1, len(infos)))
             info = infos[k]
             sample_idx = info['point_cloud']['lidar_idx']
-            points = self.get_lidar(sample_idx)
+            points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx) 
             annos = info['annos']
             names = annos['name']
             difficulty = annos['difficulty']
@@ -346,7 +359,7 @@ class KittiDataset(DatasetTemplate):
 
         sample_idx = info['point_cloud']['lidar_idx']
 
-        points = self.get_lidar(sample_idx)
+        points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)
 
         img_shape = info['image']['image_shape']
@@ -383,8 +396,9 @@ class KittiDataset(DatasetTemplate):
         return data_dict
 
 
-def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=4):
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
+def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, is_radar = False, workers=4):
+    
+    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, is_radar=is_radar, root_path=data_path, training=False )
     train_split, val_split = 'train', 'val'
 
     train_filename = save_path / ('kitti_infos_%s.pkl' % train_split)
@@ -429,11 +443,16 @@ if __name__ == '__main__':
         import yaml
         from pathlib import Path
         from easydict import EasyDict
+
+        isRad = 'radar' in sys.argv[2]
+        
+
         dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
         ROOT_DIR = (Path(__file__).resolve().parent / '../../../').resolve()
         create_kitti_infos(
             dataset_cfg=dataset_cfg,
             class_names=['Car', 'Pedestrian', 'Cyclist'],
             data_path=ROOT_DIR / 'data' / 'kitti',
-            save_path=ROOT_DIR / 'data' / 'kitti'
+            save_path=ROOT_DIR / 'data' / 'kitti',
+            is_radar = isRad
         )
