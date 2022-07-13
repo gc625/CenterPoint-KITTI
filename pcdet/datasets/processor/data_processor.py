@@ -102,8 +102,10 @@ class DataProcessor(object):
             shuffle_idx = np.random.permutation(points.shape[0])
             points = points[shuffle_idx]
             data_dict['points'] = points
-
+            # print(points.shape)
+            
         return data_dict
+
 
     def transform_points_to_voxels_placeholder(self, data_dict=None, config=None):
         # just calculate grid size
@@ -117,6 +119,8 @@ class DataProcessor(object):
 
     def transform_points_to_voxels(self, data_dict=None, config=None):
         if data_dict is None:
+            # print((self.point_cloud_range[3:6] - self.point_cloud_range[0:3]))
+            # print(np.array(config.VOXEL_SIZE))
             grid_size = (self.point_cloud_range[3:6] - self.point_cloud_range[0:3]) / np.array(config.VOXEL_SIZE)
             self.grid_size = np.round(grid_size).astype(np.int64)
             self.voxel_size = config.VOXEL_SIZE
@@ -125,6 +129,7 @@ class DataProcessor(object):
             return partial(self.transform_points_to_voxels, config=config)
 
         if self.voxel_generator is None:
+
             self.voxel_generator = VoxelGeneratorWrapper(
                 vsize_xyz=config.VOXEL_SIZE,
                 coors_range_xyz=self.point_cloud_range,
@@ -139,7 +144,10 @@ class DataProcessor(object):
 
         if not data_dict['use_lead_xyz']:
             voxels = voxels[..., 3:]  # remove xyz in voxels(N, 3)
-
+        # print('='*50+"in data processor"+"="*50)
+        # print(f'voxels{voxels.shape}')
+        # print(f'voxel coords{coordinates.shape}')
+        # print(f'voxel num poitns = {num_points.shape}')
         data_dict['voxels'] = voxels
         data_dict['voxel_coords'] = coordinates
         data_dict['voxel_num_points'] = num_points
@@ -172,6 +180,7 @@ class DataProcessor(object):
         np.random.shuffle(choice)
         data_dict['points'] = points[choice]
         return data_dict
+
 
     def sample_points(self, data_dict=None, config=None):
         if data_dict is None:
@@ -215,34 +224,32 @@ class DataProcessor(object):
         num_points = config.NUM_POINTS[self.mode]
         if num_points == -1:
             return data_dict
-
-        points = data_dict['attach']
-        if points is None:
-            return data_dict
-        if num_points < len(points):
-            pts_depth = np.linalg.norm(points[:, 0:3], axis=1)
-            pts_near_flag = pts_depth < 40.0
-            far_idxs_choice = np.where(pts_near_flag == 0)[0]
-            near_idxs = np.where(pts_near_flag == 1)[0]
-            near_idxs_choice = np.random.choice(near_idxs, num_points - len(far_idxs_choice), replace=False)
-            choice = []
-            if num_points > len(far_idxs_choice):
+        if data_dict.get('attach', None) is not None:
+            points = data_dict['attach']
+            if num_points < len(points):
+                pts_depth = np.linalg.norm(points[:, 0:3], axis=1)
+                pts_near_flag = pts_depth < 40.0
+                far_idxs_choice = np.where(pts_near_flag == 0)[0]
+                near_idxs = np.where(pts_near_flag == 1)[0]
                 near_idxs_choice = np.random.choice(near_idxs, num_points - len(far_idxs_choice), replace=False)
-                choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
-                    if len(far_idxs_choice) > 0 else near_idxs_choice
-            else: 
+                choice = []
+                if num_points > len(far_idxs_choice):
+                    near_idxs_choice = np.random.choice(near_idxs, num_points - len(far_idxs_choice), replace=False)
+                    choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
+                        if len(far_idxs_choice) > 0 else near_idxs_choice
+                else: 
+                    choice = np.arange(0, len(points), dtype=np.int32)
+                    choice = np.random.choice(choice, num_points, replace=False)
+                np.random.shuffle(choice)
+            else:
                 choice = np.arange(0, len(points), dtype=np.int32)
-                choice = np.random.choice(choice, num_points, replace=False)
-            np.random.shuffle(choice)
-        else:
-            choice = np.arange(0, len(points), dtype=np.int32)
-            if num_points > len(points):
-                # error occurs when num_points - len(points) > choice, using replace=True instead
-                # extra_choice = np.random.choice(choice, num_points - len(points), replace=False)
-                extra_choice = np.random.choice(choice, num_points - len(points), replace=True)
-                choice = np.concatenate((choice, extra_choice), axis=0)
-            np.random.shuffle(choice)
-        data_dict['attach'] = points[choice]
+                if num_points > len(points):
+                    # error occurs when num_points - len(points) > choice, using replace=True instead
+                    # extra_choice = np.random.choice(choice, num_points - len(points), replace=False)
+                    extra_choice = np.random.choice(choice, num_points - len(points), replace=True)
+                    choice = np.concatenate((choice, extra_choice), axis=0)
+                np.random.shuffle(choice)
+            data_dict['attach'] = points[choice]
         return data_dict
 
     def calculate_grid_size(self, data_dict=None, config=None):
@@ -263,6 +270,11 @@ class DataProcessor(object):
             factors=(self.depth_downsample_factor, self.depth_downsample_factor)
         )
         return data_dict
+
+   
+        
+        
+
     def forward(self, data_dict):
         """
         Args:

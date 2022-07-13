@@ -4,7 +4,7 @@ import glob
 from itertools import cycle
 import os
 # import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from pathlib import Path
 from test import repeat_eval_ckpt, eval_single_ckpt
 # from eval_utils import eval_utils
@@ -13,6 +13,7 @@ import torch.distributed as dist
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 import time
+from pcdet import models
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
 from pcdet.models import build_network, model_fn_decorator
@@ -122,18 +123,33 @@ def main():
         total_epochs=args.epochs
     )
 
+    # cfg.MODEL['DISABLE_ATTACH'] = True
+    cfg.DATA_CONFIG['DEBUG'] = cfg.MODEL['DEBUG']
+    cfg.DATA_CONFIG['USE_ATTACH'] = cfg.get('USE_ATTACH', False)
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+
+    init_mem_usage = torch.cuda.memory_allocated(torch.device('cuda'))
+
     model.cuda()
 
-    optimizer = build_optimizer(model, cfg.OPTIMIZATION)
+
+    # optimizer = build_optimizer(model, cfg.OPTIMIZATION)
 
     # load checkpoint if it is possible
     start_epoch = it = 0
     last_epoch = -1
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
+
+
+    model_mem_usage = torch.cuda.memory_allocated(torch.device('cuda'))
+    
+    model_size = model_mem_usage - init_mem_usage
+
+    model_size = model_size / 1024 / 1024 # in MB
+    logger.info('model size is %.4f MB' % model_size)
 
     # if args.ckpt is not None:
     #     it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
@@ -147,15 +163,15 @@ def main():
     #         )
     #         last_epoch = start_epoch + 1
 
-    model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
-    if dist_train:
-        model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
+    # model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
+    # if dist_train:
+    #     model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
 
-    lr_scheduler, lr_warmup_scheduler = build_scheduler(
-        optimizer, total_iters_each_epoch=len(train_loader), total_epochs=args.epochs,
-        last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
-    )
+    # lr_scheduler, lr_warmup_scheduler = build_scheduler(
+    #     optimizer, total_iters_each_epoch=len(train_loader), total_epochs=args.epochs,
+    #     last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
+    # )
     # split the train eval into several cycles
     # eval_interval = 10
     # cycle_num = int(float(args.epochs) / eval_interval + 0.5) # ceiling
@@ -204,12 +220,16 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=args.batch_size,
+        batch_size=1,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
-    eval_output_dir = output_dir / 'eval' / 'eval_with_train'
+
+    ckpt_tag = args.pretrained_model.split('/')[-1].split('.')[0]
+    eval_output_dir = output_dir / 'eval' / ckpt_tag
     eval_output_dir.mkdir(parents=True, exist_ok=True)
-    eval_single_ckpt(model, test_loader, args, eval_output_dir, logger=logger, epoch_id=args.epochs, reload=False, save_to_file=args.save_to_file,result_dir=args.result_dir)
+    eval_single_ckpt(model, test_loader, args, \
+    eval_output_dir, logger=logger, epoch_id=args.epochs, \
+    reload=False, save_to_file=args.save_to_file,result_dir=args.result_dir)
     # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     # repeat_eval_ckpt(

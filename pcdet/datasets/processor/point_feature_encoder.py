@@ -49,3 +49,43 @@ class PointFeatureEncoder(object):
             point_feature_list.append(points[:, idx:idx+1])
         point_features = np.concatenate(point_feature_list, axis=1)
         return point_features, True
+
+    def with_spherical(self, points=None):
+        if points is None:
+            num_output_features = len(self.used_feature_list)+3
+            return num_output_features
+
+        
+        eps = 1e-8
+
+        distance = np.linalg.norm(points[:, 0:3], axis=1)
+        theta = np.arctan2(points[:, 1],(points[:,0]+eps))
+        phi = np.arctan2(np.linalg.norm(points[:, 0:2]),(points[:, 3]+eps))
+
+        # points = np.column_stack((points,distance,theta,phi))
+
+        point_feature_list = [points[:, 0:3]]
+        for x in self.used_feature_list:
+            if x in ['x', 'y', 'z']:
+                continue
+            idx = self.src_feature_list.index(x)
+            
+            point_feature_list.append(points[:, idx:idx+1])
+        
+        
+
+     
+        point_feature_list.append(np.reshape(distance,(-1,1)))
+        point_feature_list.append(np.reshape(theta,(-1,1)))
+        point_feature_list.append(np.reshape(phi,(-1,1)))
+        point_features = np.concatenate(point_feature_list, axis=1)
+        # print(point_features.shape)
+        return point_features, True
+
+
+
+        
+
+                
+            
+            

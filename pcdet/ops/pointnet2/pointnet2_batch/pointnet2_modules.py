@@ -146,7 +146,7 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
         self.dilated_group = dilated_group
 
         assert len(radii) == len(nsamples) == len(mlps)
-
+        # print(f'SA module {npoint}')
         self.npoint = npoint
         self.groupers = nn.ModuleList()
         self.mlps = nn.ModuleList()
@@ -194,6 +194,8 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
             new_xyz: (B, npoint, 3) tensor of the new features' xyz
             new_features: (B, npoint, \sum_k(mlps[k][-1])) tensor of the new_features descriptors
         """
+        # print(f'in SA module, pt shape: {xyz.shape}')
+        # print(f'in SA module, feature shape: {features.shape}')
         new_features_list = []
         features = features.contiguous()
 
@@ -215,6 +217,9 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
                     xyz_tmp = xyz[:, last_fps_end_index:fps_range, :]
                     feature_tmp = features.transpose(1, 2)[:, last_fps_end_index:fps_range, :]
                     last_fps_end_index += fps_range
+
+                # print(f'xyztemp: {xyz_tmp.shape}')
+                
                 if fps_type == 'D-FPS':
                     fps_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
                 elif fps_type == 'F-FPS':
@@ -231,19 +236,24 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
                     fps_idx_1 = pointnet2_3DSSD.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
                     fps_idx_2 = pointnet2_utils.furthest_point_sample(xyz_tmp, npoint)
                     fps_idx = torch.cat([fps_idx_1, fps_idx_2], dim=-1)  # [bs, npoint * 2]
+                # print(fps_idx)
                 fps_idxes.append(fps_idx)
             fps_idxes = torch.cat(fps_idxes, dim=-1)
+            # print(fps_idxes)
             new_xyz = pointnet2_utils.gather_operation(
                 xyz_flipped, fps_idxes
             ).transpose(1, 2).contiguous() if self.npoint is not None else None
         else:
             new_xyz = ctr_xyz
-
+        # print('-'*70)
+        # print(self.groupers)
         if len(self.groupers) > 0:
             for i in range(len(self.groupers)):
-                new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
 
+                new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
+                # print(f'in SA module, new feature shape idx [{i}]: {new_features.shape}')
                 new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
+                # print(f'in SA module, new feature shape postmlp: {new_features.shape}')
                 if self.pool_method == 'max_pool':
                     new_features = F.max_pool2d(
                         new_features, kernel_size=[1, new_features.size(3)]
@@ -254,15 +264,21 @@ class PointnetSAModuleMSG_SSD(_PointnetSAModuleBase):
                     )  # (B, mlp[-1], npoint, 1)
                 else:
                     raise NotImplementedError
-
+                # print(f'in SA module, new feature shape after maxpool: {new_features.shape}')
                 new_features = new_features.squeeze(-1)  # (B, mlp[-1], npoint)
                 new_features_list.append(new_features)
-
+                # print('-'*70)
             new_features = torch.cat(new_features_list, dim=1)
+            # print(f'in SA module, new feature shape after cat: {new_features.shape}')
             new_features = self.out_aggregation(new_features)
+            # print(self.out_aggregation)
+            # print(f'in SA module, new feature shape after agg: {new_features.shape}')
         else:
             new_features = pointnet2_utils.gather_operation(features, fps_idxes).contiguous()
-
+        # print('-'*70)
+        # print(f'in SA module, new pt shape: {new_xyz.shape}')
+        # print(f'in SA module, new feature shape: {new_features.shape}')
+        # print('='*70)
         return new_xyz, new_features
 
 
@@ -626,12 +642,17 @@ class Vote_layer3DSSD(nn.Module):
 
         self.ctr_reg = nn.Conv1d(pre_channel, 3, kernel_size=1)
         self.min_offset = torch.tensor(max_translate_range).float().view(1, 1, 3)
+        
 
     def forward(self, xyz, features):
+        # print(f'mlp modules: {self.mlp_modules}')
+        # print(f'ctr_reg mod: {self.ctr_reg}')
+
+        # print(f'in Vote module, pt shape: {xyz.shape}')
+        # print(f'in Vote module, feature shape: {features.shape}')
 
         new_features = self.mlp_modules(features)
         ctr_offsets = self.ctr_reg(new_features)
-
         ctr_offsets = ctr_offsets.transpose(1, 2)
 
         min_offset = self.min_offset.repeat((xyz.shape[0], xyz.shape[1], 1)).to(xyz.device)
@@ -640,6 +661,11 @@ class Vote_layer3DSSD(nn.Module):
         min_offset = -1 * min_offset
         limited_ctr_offsets = torch.where(limited_ctr_offsets > min_offset, min_offset, limited_ctr_offsets)
         xyz = xyz + limited_ctr_offsets
+        # print('-'*70)
+        # print(f'in Vote module, new pt (shd be same) shape: {xyz.shape}')
+        # print(f'in Vote module, new feature shape: {new_features.shape}')
+        # print(f'in Vote module, ctr_offset shape: {ctr_offsets.shape}')
+        # print('='*70)
         return xyz, new_features, ctr_offsets
 
 class Vote_layer(nn.Module):
@@ -680,7 +706,8 @@ class Vote_layer(nn.Module):
         feat_offets = ctr_offsets[..., 3:]
         new_features = feat_offets
         ctr_offsets = ctr_offsets[..., :3]
-        
+        if torch.isnan(ctr_offsets).sum() > 0:
+            raise RuntimeError('Nan in ctr_offsets')
         if self.max_offset_limit is not None:
             max_offset_limit = self.max_offset_limit.view(1, 1, 3)            
             max_offset_limit = self.max_offset_limit.repeat((xyz_select.shape[0], xyz_select.shape[1], 1)).to(xyz_select.device) #([4, 256, 3])
@@ -691,7 +718,8 @@ class Vote_layer(nn.Module):
             vote_xyz = xyz_select + limited_ctr_offsets
         else:
             vote_xyz = xyz_select + ctr_offsets
-
+        if torch.isnan(vote_xyz).sum() > 0:
+            raise RuntimeError('Nan in vote_xyz')
         return vote_xyz, new_features, xyz_select, ctr_offsets
 
 class Fusion_Layer(nn.Module):
@@ -860,9 +888,7 @@ class AttentiveSAModule(nn.Module):
         :param pos_encoding: whether to use position encoding
         """
         super().__init__()
-        print(radii)
-        print(nsamples)
-        print(mlps)
+       
         assert len(radii) == len(nsamples) == len(mlps)
 
         self.npoint_list = npoint_list

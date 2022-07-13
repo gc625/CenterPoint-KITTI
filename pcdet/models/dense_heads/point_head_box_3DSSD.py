@@ -59,6 +59,7 @@ class PointHeadBox3DSSD(PointHeadTemplate):
         point_box_labels = gt_boxes.new_zeros((points.shape[0], 8)) if ret_box_labels else None
         point_part_labels = gt_boxes.new_zeros((points.shape[0], 3)) if ret_part_labels else None
         gt_boxes_of_fg_points = []
+        # print('in assign_stack_targets')
         for k in range(batch_size):
             bs_mask = (bs_idx == k)
             points_single = points[bs_mask][:, 1:4]
@@ -66,14 +67,21 @@ class PointHeadBox3DSSD(PointHeadTemplate):
             box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
                 points_single.unsqueeze(dim=0), gt_boxes[k:k + 1, :, 0:7].contiguous()
             ).long().squeeze(dim=0)
+            # print(f'gt box shape= {gt_boxes.shape}')
+            # print(f'box idx of pts = {box_idxs_of_pts.shape}')
+            
             box_fg_flag = (box_idxs_of_pts >= 0)
+            # print(f'box fg flag = {box_fg_flag[:20]}')
             if set_ignore_flag:
                 extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
                     points_single.unsqueeze(dim=0), extend_gt_boxes[k:k+1, :, 0:7].contiguous()
                 ).long().squeeze(dim=0)
                 fg_flag = box_fg_flag
                 ignore_flag = fg_flag ^ (extend_box_idxs_of_pts >= 0)
+                # print(f'extend_box_idxs_of_pts >= 0 {extend_box_idxs_of_pts >= 0}')
+                # print(f'ignore flag {ignore_flag[:20]}')
                 point_cls_labels_single[ignore_flag] = -1
+                # print(f'point_cls_labels_single {point_cls_labels_single[:20]}')
             elif use_ball_constraint:
                 box_centers = gt_boxes[k][box_idxs_of_pts][:, 0:3].clone()
                 box_centers[:, 2] += gt_boxes[k][box_idxs_of_pts][:, 5] / 2
@@ -83,10 +91,16 @@ class PointHeadBox3DSSD(PointHeadTemplate):
                 raise NotImplementedError
 
             gt_box_of_fg_points = gt_boxes[k][box_idxs_of_pts[fg_flag]]
+            # print(f'box_idxs_of_pts[fg_flag] {box_idxs_of_pts[fg_flag].shape}')
+            # print(f'box_idxs_of_pts[fg_flag] {box_idxs_of_pts[fg_flag]}')
+            # print(f'gt_box_of_fg_points {gt_box_of_fg_points.shape}')
+            # print(f'gt_box_of_fg_points {gt_box_of_fg_points}')
             point_cls_labels_single[fg_flag] = 1 if self.num_class == 1 else gt_box_of_fg_points[:, -1].long()
+            # print(f'point_cls_labels_single[fg_flag] {point_cls_labels_single[fg_flag].shape}')
+            # print(f'point_cls_labels_single[fg_flag] {point_cls_labels_single[fg_flag]}')
             point_cls_labels[bs_mask] = point_cls_labels_single
             gt_boxes_of_fg_points.append(gt_box_of_fg_points)
-
+            # print(f'gt_box_of_fg_points {gt_box_of_fg_points.shape}')
             if ret_box_labels and gt_box_of_fg_points.shape[0] > 0:
                 point_box_labels_single = point_box_labels.new_zeros((bs_mask.sum(), 8))
                 fg_point_box_labels = self.box_coder.encode_torch(
@@ -95,6 +109,13 @@ class PointHeadBox3DSSD(PointHeadTemplate):
                 )
                 point_box_labels_single[fg_flag] = fg_point_box_labels
                 point_box_labels[bs_mask] = point_box_labels_single
+                # print(f'bs_mask {bs_mask}')
+                # print(f'gt_box_of_fg_points[:, :-1] {gt_box_of_fg_points[:, :-1].shape}')
+                # print(f'gt_box_of_fg_points[:, :-1] {gt_box_of_fg_points[:, :-1]}')
+                # print(f'points_single[fg_flag] {points_single[fg_flag].shape}')
+                # print(f'points_single[fg_flag] {points_single[fg_flag]}')
+                # print(f'fg_point_box_labels, {fg_point_box_labels}')
+                # print(f'fg_point_box_labels, {fg_point_box_labels.shape}')
 
             if ret_part_labels:
                 point_part_labels_single = point_part_labels.new_zeros((bs_mask.sum(), 3))
@@ -114,6 +135,14 @@ class PointHeadBox3DSSD(PointHeadTemplate):
             'box_idxs_of_pts': box_idxs_of_pts,
             'gt_box_of_fg_points': gt_boxes_of_fg_points,
         }
+        # print('+++'*50)
+        # for thing in targets_dict:
+        #     # print(thing)
+        #     if thing == 'batch_size' or targets_dict[thing] is None:
+        #         print(f'{thing}')
+        #     else:
+        #         print(f'{thing}, {targets_dict[thing].shape}')
+        # print('+++'*50)
         return targets_dict
 
     def assign_targets(self, input_dict):
@@ -360,7 +389,14 @@ class PointHeadBox3DSSD(PointHeadTemplate):
         center_box_preds = self.box_center_layers(center_features)  # (total_centers, box_code_size)
         center_cls_preds_max, _ = center_cls_preds.max(dim=-1)
         batch_dict['center_cls_scores'] = torch.sigmoid(center_cls_preds_max)
-
+        # print(self.cls_center_layers)
+        # print(center_cls_preds.shape)
+        # print(f'center cls pred max {center_cls_preds_max.shape}')
+        # print(f'center cls pred max {center_cls_preds_max[:20]}')
+        # print(f'center cls pred max+sigmoid {torch.sigmoid(center_cls_preds_max).shape}')
+        # print(f'center cls pred max+sigmoid {torch.sigmoid(center_cls_preds_max)[:20]}')
+        # print(self.box_center_layers)
+        # print(center_box_preds.shape)
         # ret_dict = {'point_cls_preds': point_cls_preds,
         #             'point_box_preds': point_box_preds,
         #             'center_cls_preds': center_cls_preds,

@@ -12,13 +12,13 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/inhouse_models/RaDetSSDv2.yaml", 
-                "--epoch", "1", 
-                "--workers", "1", 
-                "--extra_tag", "initial_pct_0401",
+                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/kitti_models/IA-SSD-GAN-vod.yaml", 
+                "--epoch", "100", 
+                "--workers", "8", 
+                "--extra_tag", "all_cls_vcomp",
                 "--batch_size", "16",
-                "--save_to_file", "True",
-                "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/RaDetSSDv2/initial_pct_0401/ckpt/checkpoint_epoch_20.pth"
+                "--save_to_file", "False",
+                "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/domain_cross_init_car/ckpt/checkpoint_epoch_100.pth"
             ]
         }
     ]

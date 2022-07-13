@@ -4,6 +4,7 @@ from sklearn.preprocessing import OneHotEncoder
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from copy import deepcopy
 
 from ...utils import box_coder_utils, box_utils, loss_utils, common_utils
 from .point_head_box_3DSSD import PointHeadBox3DSSD
@@ -268,16 +269,6 @@ class RaDet_Head(PointHeadBox3DSSD):
                 point_box_labels_single[fg_flag] = fg_point_box_labels
                 point_box_labels[bs_mask] = point_box_labels_single
 
-            # if ret_part_labels:
-            #     point_part_labels_single = point_part_labels.new_zeros((bs_mask.sum(), 3))
-            #     transformed_points = points_single[fg_flag] - gt_box_of_fg_points[:, 0:3]
-            #     transformed_points = common_utils.rotate_points_along_z(
-            #         transformed_points.view(-1, 1, 3), -gt_box_of_fg_points[:, 6]
-            #     ).view(-1, 3)
-            #     offset = torch.tensor([0.5, 0.5, 0.5]).view(1, 3).type_as(transformed_points)
-            #     point_part_labels_single[fg_flag] = (transformed_points / gt_box_of_fg_points[:, 3:6]) + offset
-            #     point_part_labels[bs_mask] = point_part_labels_single
-
         gt_boxes_of_fg_points = torch.cat(gt_boxes_of_fg_points, dim=0)
         targets_dict = {
             'point_cls_labels': point_cls_labels,
@@ -287,6 +278,69 @@ class RaDet_Head(PointHeadBox3DSSD):
         }
         return targets_dict
 
+    def assign_stack_targets_bev(self, points, gt_boxes, extend_gt_boxes=None, ret_box_labels=False, 
+        ret_part_labels=False, set_ignore_flag=True, use_ball_constraint=False, central_radius=2):
+            
+            assert len(points.shape) == 2 and points.shape[1] == 4, 'points.shape=%s' % str(points.shape)
+            assert len(gt_boxes.shape) == 3 and gt_boxes.shape[2] == 8, 'gt_boxes.shape=%s' % str(gt_boxes.shape)
+            assert extend_gt_boxes is None or len(extend_gt_boxes.shape) == 3 and extend_gt_boxes.shape[2] == 8, \
+                'extend_gt_boxes.shape=%s' % str(extend_gt_boxes.shape)
+            assert set_ignore_flag != use_ball_constraint, 'Choose one only!'
+            batch_size = gt_boxes.shape[0]
+            bs_idx = points[:, 0]
+            point_cls_labels = points.new_zeros(points.shape[0]).long()
+            point_box_labels = gt_boxes.new_zeros((points.shape[0], 8)) if ret_box_labels else None
+            gt_boxes_of_fg_points = []
+            gt_boxes_bev = deepcopy(gt_boxes)
+            gt_boxes_bev[:, :, 2] = 0.5
+            for k in range(batch_size):
+                bs_mask = (bs_idx == k)
+                points_single = points[bs_mask][:, 1:4]
+                points_single_bev = deepcopy(points_single)
+                points_single_bev[:,-1] = 0.5 # set all points at z = 0.5m
+                point_cls_labels_single = point_cls_labels.new_zeros(bs_mask.sum())
+                box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
+                    points_single_bev.unsqueeze(dim=0), gt_boxes_bev[k:k + 1, :, 0:7].contiguous()
+                ).long().squeeze(dim=0)
+                box_fg_flag = (box_idxs_of_pts >= 0)
+                if set_ignore_flag:
+                    extend_box_idxs_of_pts = roiaware_pool3d_utils.points_in_boxes_gpu(
+                        points_single_bev.unsqueeze(dim=0), extend_gt_boxes[k:k+1, :, 0:7].contiguous()
+                    ).long().squeeze(dim=0)
+                    fg_flag = box_fg_flag
+                    ignore_flag = fg_flag ^ (extend_box_idxs_of_pts >= 0)
+                    point_cls_labels_single[ignore_flag] = -1
+                elif use_ball_constraint:
+                    box_centers = gt_boxes[k][box_idxs_of_pts][:, 0:3].clone()
+                    box_centers[:, 2] += gt_boxes[k][box_idxs_of_pts][:, 5] / 2
+                    ball_flag = ((box_centers - points_single_bev).norm(dim=1) < central_radius)
+                    fg_flag = box_fg_flag & ball_flag
+                else:
+                    raise NotImplementedError
+
+                gt_box_of_fg_points = gt_boxes[k][box_idxs_of_pts[fg_flag]]
+                point_cls_labels_single[fg_flag] = 1 if self.num_class == 1 else gt_box_of_fg_points[:, -1].long()
+                point_cls_labels[bs_mask] = point_cls_labels_single
+                gt_boxes_of_fg_points.append(gt_box_of_fg_points)
+
+                if ret_box_labels and gt_box_of_fg_points.shape[0] > 0:
+                    point_box_labels_single = point_box_labels.new_zeros((bs_mask.sum(), 8))
+                    fg_point_box_labels = self.box_coder.encode_torch(
+                        gt_boxes=gt_box_of_fg_points[:, :-1], points=points_single[fg_flag],
+                        gt_classes=gt_box_of_fg_points[:, -1].long()
+                    )
+                    point_box_labels_single[fg_flag] = fg_point_box_labels
+                    point_box_labels[bs_mask] = point_box_labels_single
+
+            gt_boxes_of_fg_points = torch.cat(gt_boxes_of_fg_points, dim=0)
+            targets_dict = {
+                'point_cls_labels': point_cls_labels,
+                'point_box_labels': point_box_labels,
+                'box_idxs_of_pts': box_idxs_of_pts,
+                'gt_box_of_fg_points': gt_boxes_of_fg_points,
+            }
+            return targets_dict
+        
 
     def get_loss(self, tb_dict=None):
 

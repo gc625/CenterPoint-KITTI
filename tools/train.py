@@ -108,7 +108,7 @@ def main():
         os.system('cp %s %s' % (args.cfg_file, output_dir))
 
     tb_log = SummaryWriter(log_dir=str(output_dir / 'tensorboard')) if cfg.LOCAL_RANK == 0 else None
-
+    cfg.DATA_CONFIG['USE_ATTACH'] = cfg.get('USE_ATTACH', False)
     # -----------------------create dataloader & network & optimizer---------------------------
     train_set, train_loader, train_sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
@@ -216,7 +216,8 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=args.batch_size,
+        # batch_size=args.batch_size,
+        batch_size=1,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
     eval_output_dir = output_dir / 'eval' / 'eval_with_train'

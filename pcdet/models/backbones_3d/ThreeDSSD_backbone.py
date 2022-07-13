@@ -28,6 +28,7 @@ class SSDBackbone(nn.Module):
 
         for k in range(self.model_cfg.SA_CONFIG.NPOINTS.__len__()):
             channel_in = channel_out_list[self.layer_inputs[k]]
+            
             if self.layer_types[k] == 'SA_Layer':
                 mlps = self.model_cfg.SA_CONFIG.MLPS[k].copy()
                 for idx in range(mlps.__len__()):
@@ -94,25 +95,48 @@ class SSDBackbone(nn.Module):
         for i in range(len(self.SA_modules)):
             xyz_input = encoder_xyz[self.layer_inputs[i]]
             feature_input = encoder_features[self.layer_inputs[i]]
+            # print(f'CURRENT LAYER name: {self.layer_names[ ci]}, ft input len{len(encoder_features)}') 
+            
             if self.layer_types[i] == 'SA_Layer':
+            
                 ctr_xyz = None
                 if self.ctr_indexes[i] != -1:
+            
                     ctr_xyz = encoder_xyz[self.ctr_indexes[i]]
                 li_xyz, li_features = self.SA_modules[i](xyz_input, feature_input, ctr_xyz=ctr_xyz)
             elif self.layer_types[i] == 'Vote_Layer':
+            
                 li_xyz, li_features, ctr_offsets = self.SA_modules[i](xyz_input, feature_input)
                 centers = li_xyz
                 centers_origin = xyz_input
             encoder_xyz.append(li_xyz)
             encoder_features.append(li_features)
-            
+        
+        # print('all modules done:')
+        # for i in range(len(encoder_xyz)):
+            # print(f'idx {i:} encoder_xyz shape {encoder_xyz[i].shape}')
+            # print(f'idx {i:} encoder featurs shape {encoder_features[i].shape}')
+        # print(f'ctr_offsets shape {ctr_offsets.shape}')
+        # print(f'bactch idx shape {batch_idx.shape}')
+        # print(f'after all layers, encoder_xyz shape: {encoder_xyz.shape}')
+        # print(f'after all layers, encoder_feature shape: {encoder_features.shape}')
         ctr_batch_idx = batch_idx.view(batch_size, -1)[:, :ctr_offsets.shape[1]]
+        # print(f'ctr_batch_idx {ctr_batch_idx}')
+        # print(f'batchsize {batch_size}')
         ctr_batch_idx = ctr_batch_idx.contiguous().view(-1)
+        # print(f'ctr_batch_idx {ctr_batch_idx.shape}')
         batch_dict['ctr_offsets'] = torch.cat((ctr_batch_idx[:, None].float(), ctr_offsets.contiguous().view(-1, 3)), dim=1)
         batch_dict['centers'] = torch.cat((ctr_batch_idx[:, None].float(), centers.contiguous().view(-1, 3)), dim=1)
         batch_dict['centers_origin'] = torch.cat((ctr_batch_idx[:, None].float(), centers_origin.contiguous().view(-1, 3)), dim=1)
         center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1])
         batch_dict['centers_features'] = center_features
         batch_dict['ctr_batch_idx'] = ctr_batch_idx
+
+        # for thing in batch_dict:
+        #     # print(thing)
+        #     if thing == 'batch_size':
+        #         print(f'{thing}')
+        #     else:
+        #         print(f'{thing}, {batch_dict[thing].shape}')
 
         return batch_dict

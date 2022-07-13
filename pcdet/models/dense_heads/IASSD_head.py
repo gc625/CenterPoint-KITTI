@@ -14,7 +14,7 @@ class IASSD_Head(PointHeadTemplate):
     def __init__(self, num_class, input_channels, model_cfg, predict_boxes_when_training=False, **kwargs):
         super().__init__(model_cfg=model_cfg, num_class=num_class)
         self.predict_boxes_when_training = predict_boxes_when_training
-
+        self.debug = model_cfg.get('DEBUG', False)
         target_cfg = self.model_cfg.TARGET_CONFIG
         self.box_coder = getattr(box_coder_utils, target_cfg.BOX_CODER)(
             **target_cfg.BOX_CODER_CONFIG
@@ -147,7 +147,8 @@ class IASSD_Head(PointHeadTemplate):
         box_idxs_labels = points.new_zeros(points.shape[0]).long() 
         gt_boxes_of_fg_points = []
         gt_box_of_points = gt_boxes.new_zeros((points.shape[0], 8))
-
+# 
+        # print(f">>>> GT BOX SHAPE: {gt_boxes.shape}")
         for k in range(batch_size):            
             bs_mask = (bs_idx == k)
             points_single = points[bs_mask][:, 1:4]
@@ -237,7 +238,9 @@ class IASSD_Head(PointHeadTemplate):
             # ==============================================================
             gt_boxes_of_fg_points.append(gt_box_of_fg_points)
             box_idxs_labels[bs_mask] = box_idxs_of_pts
-            gt_box_of_points[bs_mask] = gt_boxes[k][box_idxs_of_pts]
+            if k !=0:
+                gt_box_of_points[bs_mask] = gt_boxes[k][box_idxs_of_pts]
+                
 
             if ret_box_labels and gt_box_of_fg_points.shape[0] > 0:
                 point_box_labels_single = point_box_labels.new_zeros((bs_mask.sum(), 8))
@@ -453,6 +456,8 @@ class IASSD_Head(PointHeadTemplate):
             assert ('sa_ins_preds' in self.forward_ret_dict) and ('sa_ins_labels' in self.forward_ret_dict)
             sa_loss_cls, tb_dict_0 = self.get_sa_ins_layer_loss()
             tb_dict.update(tb_dict_0)
+            if self.debug:
+                tb_dict['sa_ins_labels'] = self.forward_ret_dict['sa_ins_labels']
         else:
             sa_loss_cls = 0
 
@@ -864,7 +869,7 @@ class IASSD_Head(PointHeadTemplate):
                     'sa_ins_preds': batch_dict['sa_ins_preds'],
                     'box_iou3d_preds': box_iou3d_preds,
                     }
-        if self.training:
+        if self.training or self.debug:
             targets_dict = self.assign_targets(batch_dict)
             ret_dict.update(targets_dict)
 

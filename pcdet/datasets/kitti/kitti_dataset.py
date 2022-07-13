@@ -10,7 +10,7 @@ from ..dataset import DatasetTemplate
 
 
 class KittiDataset(DatasetTemplate):
-    def __init__(self, dataset_cfg, class_names, is_radar, training=True, root_path=None, logger=None):
+    def __init__(self, dataset_cfg, class_names, training=True, root_path=None, logger=None):
         """
         Args:
             root_path:
@@ -33,7 +33,20 @@ class KittiDataset(DatasetTemplate):
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
 
-        self.is_radar = is_radar
+        #  not sure if modifying /datasets/dataset.py is a good idea so 
+        # doing it like this for now, 
+        self.is_radar = dataset_cfg.get('IS_RADAR', False)
+        # self.is_radar = False
+        self.debug = dataset_cfg.get('DEBUG', False)
+        # modified for trans-ssd
+        self.use_attach = self.dataset_cfg.get('USE_ATTACH', False)
+        self.attach_root = self.dataset_cfg.get('ATTACH_ROOT', None) if self.use_attach else None
+        self.attach_root = Path(self.attach_root) if self.attach_root is not None else None
+        self.resample_pts_num = 100 # default setting
+        for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
+            if process_cfg.NAME == 'sample_radar_points':
+                self.resample_pts_num = process_cfg.MIN_NUM_PTS
+
 
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -68,9 +81,17 @@ class KittiDataset(DatasetTemplate):
         assert lidar_file.exists()
         return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
 
+    def get_attach_lidar(self, idx):
+        # create soft link for attach_lidar
+        lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
+        # print('getting attach lidar data')
+        assert lidar_file.exists()
+        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+
     def get_radar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
+        # print(lidar_file)
         return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
 
 
@@ -363,7 +384,14 @@ class KittiDataset(DatasetTemplate):
 
         points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)
-
+        if self.use_attach & self.training:
+            # print('loading attach lidar')
+            attach = self.get_attach_lidar(sample_idx)
+        elif self.debug:
+            attach = self.get_attach_lidar(sample_idx)
+        else:
+            # print('not loading attach lidar')
+            attach = None
         img_shape = info['image']['image_shape']
         if self.dataset_cfg.FOV_POINTS_ONLY:
             pts_rect = calib.lidar_to_rect(points[:, 0:3])
@@ -373,8 +401,10 @@ class KittiDataset(DatasetTemplate):
         input_dict = {
             'points': points,
             'frame_id': sample_idx,
-            'calib': calib,
+            'calib': calib
         }
+        if attach is not None:
+            input_dict['attach'] = attach
 
         if 'annos' in info:
             annos = info['annos']
@@ -398,9 +428,9 @@ class KittiDataset(DatasetTemplate):
         return data_dict
 
 
-def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, is_radar = False, workers=4):
+def create_kitti_infos(dataset_cfg, class_names, data_path, save_path,workers=4):
     
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, is_radar=is_radar, root_path=data_path, training=False )
+    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False )
     train_split, val_split = 'train', 'val'
 
     train_filename = save_path / ('kitti_infos_%s.pkl' % train_split)
@@ -446,7 +476,7 @@ if __name__ == '__main__':
         from pathlib import Path
         from easydict import EasyDict
 
-        isRad = 'radar' in sys.argv[2]
+        isRadar = 'radar' in sys.argv[2]
         
 
         print('====> print %s' % sys.argv[2])
@@ -458,6 +488,5 @@ if __name__ == '__main__':
             dataset_cfg=dataset_cfg,
             class_names=['Car', 'Pedestrian', 'Cyclist'],
             data_path=ROOT_DIR,
-            save_path=ROOT_DIR,
-            is_radar = isRad
+            save_path=ROOT_DIR
         )

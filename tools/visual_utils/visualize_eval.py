@@ -7,7 +7,8 @@ import pickle
 from matplotlib.patches import Rectangle as Rec
 import cv2
 
-root_dir = P('/root/dj/code/CenterPoint-KITTI/output/RaDetSSDv2/initial_pct_0401/eval/eval_with_train')
+# root_dir = P('/root/dj/code/CenterPoint-KITTI/output/RaDetSSDv2/initial_pct_0401/eval/eval_with_train')
+root_dir = P('/root/dj/code/CenterPoint-KITTI/output/pointpillar_vod/debug_new/eval/eval_with_train/epoch_20/val')
 
 frame_ids = root_dir / 'frame_ids.txt'
 frame_ids = np.loadtxt(frame_ids, delimiter=',', dtype=str)
@@ -25,10 +26,11 @@ with open(gt_file, 'rb') as f:
     infos = pickle.load(f)
     gt_annos.extend(infos)
 
-radar_pcd_path = P('/root/data/public/shangqi/data_0401/radar/kitti_format/radar')
+# radar_pcd_path = P('/root/data/public/shangqi/data_0401/radar/kitti_format/radar')
+radar_pcd_path = P('/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/velodyne')
 
 def getpcd(fname):
-    return np.fromfile(str(fname), dtype=np.float32).reshape(-1, 6)
+    return np.fromfile(str(fname), dtype=np.float32).reshape(-1, 4)
 
 def anno2plt(anno, color, lw, xz=True):
     dim = anno['dimensions']

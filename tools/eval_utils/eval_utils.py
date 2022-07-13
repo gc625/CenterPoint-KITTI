@@ -52,19 +52,52 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval', dynamic_ncols=True)
     start_time = time.time()
     frame_ids = []
+    sum_duration = 0
+
+    # collect centers, centers_origin for visualization
+    center_dict = {}
+    center_origin_dict = {}
+    ip_dict = {}
+    det_dict = {}
+    init_flag = False
     for i, batch_dict in enumerate(dataloader):
         load_data_to_gpu(batch_dict)
-        with torch.no_grad():
-            pred_dicts, ret_dict = model(batch_dict)
-            frame_ids += list(batch_dict['frame_id'])
-        disp_dict = {}
 
+        with torch.no_grad():
+            start_run_time = time.time()
+            pred_dicts, ret_dict = model(batch_dict)
+            duration = time.time() - start_run_time
+            frame_ids += list(batch_dict['frame_id'])
+            save_center = ('centers' in batch_dict)
+
+            if save_center:
+                centers = batch_dict['centers'].cpu().numpy()
+                centers_origin = batch_dict['centers_origin'].cpu().numpy()
+                points = batch_dict['points'].cpu().numpy()
+                center_dict[frame_ids[-1]] = centers
+                center_origin_dict[frame_ids[-1]] = centers_origin
+                ip_dict[frame_ids[-1]] = points
+
+                # pointwise classification
+                radar_idx = batch_dict['radar_idx'].cpu().numpy().reshape([-1])
+                lidar_idx = batch_dict['lidar_idx'].cpu().numpy().reshape([-1])
+                mask = batch_dict['mask'].cpu().numpy().reshape([-1])
+                lidar_center = batch_dict['lidar_centers'].cpu().numpy()
+                lidar_preds = batch_dict['lidar_preds'][2]
+                radar_cls_label = batch_dict['sa_ins_labels']
+                radar_preds = batch_dict['sa_ins_preds'][2]
+                print('saving debug result')
+                
+
+        disp_dict = {}
+        sum_duration += duration
         statistics_info(cfg, ret_dict, metric, disp_dict)
         annos = dataset.generate_prediction_dicts(
             batch_dict, pred_dicts, class_names,
             output_path=final_output_dir if save_to_file else None
         )
         det_annos += annos
+        det_dict[frame_ids[-1]] = annos
         if cfg.LOCAL_RANK == 0:
             progress_bar.set_postfix(disp_dict)
             progress_bar.update()
@@ -84,6 +117,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     logger.info('Peak memory usage: %.4f KB.' % peak_memory)
     peak_memory = peak_memory/1024 # convert to MByte
     logger.info('Peak memory usage: %.4f MB.' % peak_memory)
+    logger.info('Average run time per scan: %.4f ms' % (sum_duration / len(dataloader.dataset) * 1000))
     logger.info('Generate label finished(sec_per_example: %.4f second).' % sec_per_example)
 
     if cfg.LOCAL_RANK != 0:
@@ -121,7 +155,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     gt_dict = {}
     for info in dataset.kitti_infos:
-        frame_id = copy.deepcopy(info['timestamp'])
+        frame_id = copy.deepcopy(info['image']['image_idx'])
         gt_anno = copy.deepcopy(info['annos'])
         gt_dict[frame_id] = gt_anno
         pass
@@ -130,8 +164,22 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     for id in frame_ids:
         gt_annos += [gt_dict[id]]
     with open(result_dir / 'gt.pkl', 'wb') as f:
-        pickle.dump(gt_annos, f)
+        pickle.dump(gt_dict, f)
 
+    # save detection
+    with open(result_dir / 'dt.pkl', 'wb') as f:
+        pickle.dump(det_dict, f)
+    
+    if save_center:
+        # save centers 
+        with open(result_dir / 'centers.pkl', 'wb') as f:
+            pickle.dump(center_dict, f)
+        # save centers_origin
+        with open(result_dir / 'centers_origin.pkl', 'wb') as f:
+            pickle.dump(center_origin_dict, f)
+        # save input points
+        with open(result_dir / 'points.pkl', 'wb') as f:
+            pickle.dump(ip_dict, f)
     # save frame ids
     with open(result_dir / 'frame_ids.txt', 'w') as f:
         for id in frame_ids: 
@@ -152,7 +200,8 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     logger.info(result_str)
     ret_dict.update(result_dict)
-
+    # save gt, prediction, final points origin, final points new coordinate
+    
     logger.info('Result is save to %s' % result_dir)
     logger.info('****************Evaluation done.*****************')
     return ret_dict

@@ -14,10 +14,15 @@ class IASSD_GAN(Detector3DTemplate):
         self.module_list = self.build_networks()
         self.attach_module_topology = ['backbone_3d']
         self.shared_module_topology = ['point_head']
+        
+        self.debug = self.model_cfg.get('DEBUG', False)
         self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
         self.attach_model_cfg.BACKBONE_3D['num_class'] = num_class
-        attach_model = self.build_attach_network()
-        self.attach_model = attach_model[0]
+        if model_cfg.get('DISABLE_ATTACH'):
+            self.attach_model = None
+        else:
+            attach_model = self.build_attach_network()
+            self.attach_model = attach_model[0]
         # self.module_list += attach_model
         if self.model_cfg.get('CROSS_OVER', None) is None:
             self.cross_over_cfg = None
@@ -56,7 +61,18 @@ class IASSD_GAN(Detector3DTemplate):
             disp_dict['tatal_loss'] = loss.item()
             return ret_dict, tb_dict, disp_dict
         else:
+
+            if self.debug:
+                loss, tb_dict, disp_dict = self.get_training_loss()
+                transfer_loss = self.get_transfer_loss(batch_dict)
+                batch_dict['sa_ins_labels'] = tb_dict['sa_ins_labels']
+                # selected lidar points
+                # selected lidar points labels
+                # radar points labels
+                # radar points classification
+                pass
             pred_dicts, recall_dicts = self.post_processing(batch_dict)
+            # recall_dicts['batch_dict'] = batch_dict
             return pred_dicts, recall_dicts
 
     def freeze_attach(self):
@@ -84,7 +100,7 @@ class IASSD_GAN(Detector3DTemplate):
         
         # matching loss
         self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
-        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should result the one and only result
+        cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should get the one and only result
         mask = mask.unsqueeze(-1).unsqueeze(-1)
         self_feat = df.index_points_group(radar_shared_feat, self_idx)
         cross_feat = df.index_points_group(lidar_shared_feat, cross_idx)
@@ -102,6 +118,15 @@ class IASSD_GAN(Detector3DTemplate):
 
         cross_over_loss = (rec_loss + matching_loss)/2
 
+        # ============= save files for debug ==================
+        if self.debug:
+            # save point match to transfer dict
+            x['radar_idx'] = self_idx
+            x['lidar_idx'] = cross_idx
+            x['mask'] = mask
+
+            pass
+        # ============= save files for debug ==================
         return cross_over_loss
 
     def positive_mask(self, self_pts, cross_pts, self_idx, cross_idx, input_dict):
@@ -170,6 +195,7 @@ class IASSD_GAN(Detector3DTemplate):
             # print('calculating domain cross over loss')
             self.transfer(transfer_dict)
             cross_over_loss = self.get_domain_cross_loss(transfer_dict)
+            
             # construct dict for shared_head
             radar_shared_feat = transfer_dict['radar_shared']
             share_head_dict = {}
@@ -181,9 +207,14 @@ class IASSD_GAN(Detector3DTemplate):
             _, c, _ = radar_shared_feat.shape
             share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
             share_head_dict = self.shared_head(share_head_dict)
-            share_head_loss, _ = self.shared_head.get_loss(share_head_dict)
+            share_head_loss, shared_tb_dict = self.shared_head.get_loss(share_head_dict)
             transfer_loss = (share_head_loss + cross_over_loss)/2
-            
+            if self.debug:
+                batch_dict['radar_idx'] = transfer_dict['radar_idx']
+                batch_dict['lidar_idx'] = transfer_dict['lidar_idx']
+                batch_dict['mask'] = transfer_dict['mask']
+                batch_dict['lidar_centers'] = transfer_dict['att']['centers']
+                batch_dict['lidar_preds'] = transfer_dict['att']['sa_ins_preds']
 
         return transfer_loss
 
@@ -197,7 +228,9 @@ class IASSD_GAN(Detector3DTemplate):
             'voxel_size': self.dataset.voxel_size,
             'is_attach': False
         }
+
         for module_name in self.shared_module_topology:
+            self.model_cfg.SHARED_HEAD['DEBUG'] = self.debug
             module, model_info_dict = getattr(self, 'build_%s' % module_name)(
                 model_info_dict=model_info_dict,
                 custom_cfg=self.model_cfg.SHARED_HEAD
@@ -399,7 +432,9 @@ class DomainCrossOver(nn.Module):
         bat_xyzs = batch_dict['encoder_xyz']
         lidar_xyz = att_xyzs[-1]
         radar_xyz = bat_xyzs[-1]
-
+        if torch.isnan(radar_xyz).sum() > 0:
+            raise RuntimeError('Nan occurs in domain cross over!')
+        
         # lidar_xyz = batch_dict['lidar_xyz'] # psuedo
         # radar_xyz = batch_dict['radar_xyz'] # psuedo
 

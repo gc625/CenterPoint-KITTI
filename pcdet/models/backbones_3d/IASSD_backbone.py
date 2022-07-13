@@ -156,6 +156,8 @@ class IASSD_Backbone(nn.Module):
                 ctr_xyz = encoder_xyz[self.ctr_idx_list[i]] if self.ctr_idx_list[i] != -1 else None
                 li_xyz, li_features = self.SA_modules[i](xyz_input, feature_input, ctr_xyz)
                 li_cls_pred = None
+            if torch.isnan(li_xyz).sum() > 0:
+                raise RuntimeError('Nan in li_xyz!')
             encoder_xyz.append(li_xyz)
             li_batch_idx = batch_idx.view(batch_size, -1)[:, :li_xyz.shape[1]]
             encoder_coords.append(torch.cat([li_batch_idx[..., None].float(),li_xyz.view(batch_size, -1, 3)],dim =-1))
@@ -176,6 +178,11 @@ class IASSD_Backbone(nn.Module):
         
         center_features = encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, encoder_features[-1].shape[1]) # shape?
         batch_dict['centers_features'] = center_features
+
+        # check encoder xyzs
+        if torch.isnan(centers).sum() > 0:
+            raise RuntimeError('Nan in centers!')
+
 
         batch_dict['encoder_xyz'] = encoder_xyz
         batch_dict['encoder_coords'] = encoder_coords

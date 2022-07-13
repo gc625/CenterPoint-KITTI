@@ -1,54 +1,39 @@
-DATASET: 'inHouseDataset'
-# DATA_PATH: '/root/data/public/shangqi/radar_loose/kitti_format'
-# DATA_PATH: '/root/data/public/shangqi/radar_strict/kitti_format'
-# DATA_PATH: '/root/data/public/shangqi/radar_test/kitti_format'
-# /root/data/public/shangqi/data_0401/radar/kitti_format
-DATA_PATH: '/root/data/public/shangqi/data_0401/radar/kitti_format'
-# POINT_CLOUD_RANGE: [0, -40, -2, 70.4, 40, 3]
-# some radar points may locate at x < 0
-# TODO: CHECK range
-POINT_CLOUD_RANGE: [0, -40, -2, 70, 40, 3]
+DATASET: 'KittiDataset'
+DATA_PATH: '/root/dj/code/CenterPoint-KITTI/data/vod_radar'
+# DATA_PATH: '/root/dj/code/CenterPoint-KITTI/data/vod/kitti'
+
+POINT_CLOUD_RANGE: [0, -25.6, -3, 51.2, 25.6, 2]
 
 DATA_SPLIT: {
     'train': train,
-    'test': test
+    'test': val
 }
 
-# TODO: generate pkl files?  
 INFO_PATH: {
-    'train': [inhouse_infos_train.pkl],
-    'test': [inhouse_infos_test.pkl],
+    'train': [kitti_infos_train.pkl],
+    'test': [kitti_infos_val.pkl],
 }
 
 FOV_POINTS_ONLY: True
-
-
-MODALITY: 'radar'
-
-TRAIN_LABEL_FILTER: 
-  min_pts: 1
+IS_RADAR: True
 
 DATA_AUGMENTOR:
-    DISABLE_AUG_LIST: ['placeholder']
+    DISABLE_AUG_LIST: ['random_world_rotation','gt_sampling']
     AUG_CONFIG_LIST:
         - NAME: gt_sampling
           USE_ROAD_PLANE: False
-          DB_INFO_PATH: # TODO: CHECK this
-              - inhouse_dbinfos_train.pkl
+          DB_INFO_PATH:
+              - kitti_dbinfos_train.pkl
           PREPARE: {
-
-            # TODO: find out what are these settings
-            #  filter_by_min_points: ['Car:5', 'Pedestrian:3', 'Cyclist:3'],
-            filter_by_min_points: ['Car:1', 'Truck:1'],
-             filter_by_difficulty: [10],
+             filter_by_min_points: ['Car:0', 'Pedestrian:1', 'Cyclist:1'],
+             filter_by_difficulty: [-1],
           }
 
-
-          SAMPLE_GROUPS: ['Car:0', 'Truck:0'] # disable gt sampling
-          NUM_POINT_FEATURES: 6
-          DATABASE_WITH_FAKELIDAR: False
-          REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
-          LIMIT_WHOLE_SCENE: True
+        #   SAMPLE_GROUPS: ['Car:0','Pedestrian:0', 'Cyclist:0']
+        #   NUM_POINT_FEATURES: 4
+        #   DATABASE_WITH_FAKELIDAR: False
+        #   REMOVE_EXTRA_WIDTH: [0.0, 0.0, 0.0]
+        #   LIMIT_WHOLE_SCENE: True
 
         # - NAME: random_world_flip
         #   ALONG_AXIS_LIST: ['x']
@@ -58,17 +43,23 @@ DATA_AUGMENTOR:
 
         # - NAME: random_world_scaling
         #   WORLD_SCALE_RANGE: [0.95, 1.05]
+        
+        # - NAME: random_world_flip
+        #   ALONG_AXIS_LIST: ['x']
 
-# TODO: UPDATE TO [x, y, z, RCS, v_r, v_r_compensated, time]
+        # - NAME: random_world_scaling
+        #   WORLD_SCALE_RANGE: [0.95, 1.05]
+
+
 POINT_FEATURE_ENCODING: {
     encoding_type: absolute_coordinates_encoding,
-    used_feature_list: ['x', 'y', 'z', 'speed', 'power', 'rcs'],
-    src_feature_list: ['x', 'y', 'z', 'speed', 'power', 'rcs'],
+    used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
+    src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'] 
 }
 
 
 DATA_PROCESSOR:
-    - NAME: mask_points_and_boxes_outside_range # TODO: check if this is correct
+    - NAME: mask_points_and_boxes_outside_range
       REMOVE_OUTSIDE_BOXES: True
 
     - NAME: shuffle_points
@@ -76,12 +67,11 @@ DATA_PROCESSOR:
         'train': True,
         'test': False
       }
-
-# TODO: check what this does/needs disabling?
+    # [0.16, 0.16, 5]
     - NAME: transform_points_to_voxels
-      VOXEL_SIZE: [0.05, 0.05, 0.1]
-      MAX_POINTS_PER_VOXEL: 5
+      VOXEL_SIZE:  [0.05, 0.05, 0.1]
+      MAX_POINTS_PER_VOXEL: 10
       MAX_NUMBER_OF_VOXELS: {
         'train': 16000,
         'test': 40000
-      }
+    }

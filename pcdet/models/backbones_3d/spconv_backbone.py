@@ -71,9 +71,11 @@ class VoxelBackBone8x(nn.Module):
         super().__init__()
         self.model_cfg = model_cfg
         norm_fn = partial(nn.BatchNorm1d, eps=1e-3, momentum=0.01)
-
+        # print('='*50+"in voxbackbone"+ '='*50)
+        
         self.sparse_shape = grid_size[::-1] + [1, 0, 0]
-
+        # print(f'sparse shape{self.sparse_shape}') # grid size + [1,0,0]? 
+        # print(f'input channels {input_channels}') # just x,y,z,{C}
         self.conv_input = spconv.SparseSequential(
             spconv.SubMConv3d(input_channels, 16, 3, padding=1, bias=False, indice_key='subm1'),
             norm_fn(16),
@@ -144,13 +146,27 @@ class VoxelBackBone8x(nn.Module):
             spatial_shape=self.sparse_shape,
             batch_size=batch_size
         )
-
+        # print("="*50+" in backbone forward"+"="*50)
+        # print(f'voxel features{voxel_features.shape}')
+        # print(f'voxel num pts {voxel_coords.shape}')
         x = self.conv_input(input_sp_tensor)
 
         x_conv1 = self.conv1(x)
+        # print(f'x_conv1 spatial shape {x_conv1.spatial_shape}')
+        # print(f'x_conv1 dense {x_conv1.dense().shape}')
+        # print("="*100)
         x_conv2 = self.conv2(x_conv1)
+        # print(f'x_conv2 spatial shape {x_conv2.spatial_shape}')
+        # print(f'x_conv2 dense {x_conv2.dense().shape}')
+        # print("="*100)
         x_conv3 = self.conv3(x_conv2)
+        # print(f'x_conv3 spatial shape {x_conv3.spatial_shape}')
+        # print(f'x_conv3 dense {x_conv3.dense().shape}')
+        # print("="*100)
         x_conv4 = self.conv4(x_conv3)
+        # print(f'x_conv4 spatial shape {x_conv4.spatial_shape}')
+        # print(f'x_conv4 dense {x_conv4.dense().shape}')
+        # print("="*100)
 
         # for detection head
         # [200, 176, 5] -> [200, 176, 2]
