@@ -6,3 +6,6 @@ easydict
 pyyaml
 scikit-image
 tqdm
+open3d
+k3d
+scikit-learn
