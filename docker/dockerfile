@@ -148,7 +148,7 @@ RUN ln -sv /usr/bin/python3.7 /usr/bin/python
 
 # Install python packages
 RUN PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    $PIP_INSTALL tensorboardX easydict pyyaml scikit-image tqdm SharedArray six
+    $PIP_INSTALL tensorboardX easydict pyyaml scikit-image tqdm SharedArray six matplotlib k3d
 
 WORKDIR /root
 

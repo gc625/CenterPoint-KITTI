@@ -71,7 +71,7 @@ def ball_point(nsample, xyz, new_xyz, radius):
         radius: float 
     Return:
         group_idx: grouped points index, [B, S, nsample], index for xyz
-        mask_sum: where no points within radius is found
+        mask_sum: where points within radius are found
     """
     sqrdists = square_distance(new_xyz, xyz)
     top_dist, group_idx = torch.topk(sqrdists, nsample, dim = -1, largest=False, \
@@ -79,9 +79,9 @@ def ball_point(nsample, xyz, new_xyz, radius):
     b, n, _ = new_xyz.shape
     original_idx = torch.arange(n).reshape([1, -1, 1]).to(xyz.device).long()
     original_idx = original_idx.repeat([b, 1, nsample])
-    mask = top_dist > radius
+    mask = top_dist < radius
     mask_sum = mask.sum(dim=-1)
-    group_idx[mask] = original_idx[mask]
+    # group_idx[mask] = original_idx[mask]
     return group_idx, mask_sum
 
 def index_points_gather(points, fps_idx):

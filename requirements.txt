@@ -6,3 +6,7 @@ easydict
 pyyaml
 scikit-image
 tqdm
+ipdb
+sklearn
+k3d
+matplotlib

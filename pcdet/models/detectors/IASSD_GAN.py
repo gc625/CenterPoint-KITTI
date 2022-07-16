@@ -1,4 +1,3 @@
-from multiprocessing import reduction
 from .detector3d_template import Detector3DTemplate
 import torch
 import torch.nn as nn
@@ -7,13 +6,17 @@ import os
 from ...ops.roiaware_pool3d import roiaware_pool3d_utils
 from ...utils import box_coder_utils, box_utils, loss_utils, common_utils
 import ipdb
+from ...vis_tools.vis_tools import *
+import numpy as np
 
 class IASSD_GAN(Detector3DTemplate):
-    def __init__(self, model_cfg, num_class, dataset):
+    def __init__(self, model_cfg, num_class, dataset, tb_log=None):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
         self.module_list = self.build_networks()
         self.attach_module_topology = ['backbone_3d']
         self.shared_module_topology = ['point_head']
+        self.tb_log = tb_log
+        self.class_names = model_cfg.get('CLASS_NAMES', None)
         
         self.debug = self.model_cfg.get('DEBUG', False)
         self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
@@ -61,7 +64,8 @@ class IASSD_GAN(Detector3DTemplate):
             disp_dict['tatal_loss'] = loss.item()
             return ret_dict, tb_dict, disp_dict
         else:
-
+            
+            pred_dicts, recall_dicts = self.post_processing(batch_dict)
             if self.debug:
                 loss, tb_dict, disp_dict = self.get_training_loss()
                 transfer_loss = self.get_transfer_loss(batch_dict)
@@ -71,7 +75,6 @@ class IASSD_GAN(Detector3DTemplate):
                 # radar points labels
                 # radar points classification
                 pass
-            pred_dicts, recall_dicts = self.post_processing(batch_dict)
             # recall_dicts['batch_dict'] = batch_dict
             return pred_dicts, recall_dicts
 
@@ -81,17 +84,32 @@ class IASSD_GAN(Detector3DTemplate):
     # def get_shared_head_loss(self, share_head_dict):
     #     head_loss_pt, tb_dict = self.shared_head.get_loss(share_head_dict)
     #     return head_loss_pt, tb_dict
+    def break_up_pc(self, pc):
+        batch_idx = pc[:, 0]
+        xyz = pc[:, 1:4].contiguous()
+        features = (pc[:, 4:].contiguous() if pc.size(-1) > 4 else None)
+        return batch_idx, xyz, features
 
     def get_domain_cross_loss(self, x):
         lidar_original = x['lidar_original']
         radar_original = x['radar_original']
         lidar_recover = x['lidar_recover']
         radar_recover = x['radar_recover']
+        batch_size = x['batch']['batch_size']
+        lidar_center = x['att']['centers']
+        _, lidar_center, _ = self.break_up_pc(lidar_center)
+        radar_center = x['batch']['centers']
+        _, radar_center, _ = self.break_up_pc(radar_center)
+        # xyz = xyz.view(batch_size, -1, 3)
+        lidar_center = lidar_center.view(batch_size, -1, 3)
+        radar_center = radar_center.view(batch_size, -1, 3)
 
         lidar_shared_feat = x['lidar_shared'].permute(0,2,1) # [B, C, N] -> [B, N, C]
         radar_shared_feat = x['radar_shared'].permute(0,2,1)
-        lidar_xyz = x['lidar_xyz']
-        radar_xyz = x['radar_xyz']
+        # lidar_xyz = x['lidar_xyz']
+        # radar_xyz = x['radar_xyz']
+        lidar_xyz = lidar_center
+        radar_xyz = radar_center    
 
         rec_lidar_loss = nn.functional.mse_loss(lidar_original, lidar_recover, reduction='mean')
         rec_radar_loss = nn.functional.mse_loss(radar_original, radar_recover, reduction='mean')
@@ -108,6 +126,20 @@ class IASSD_GAN(Detector3DTemplate):
         cross_coord = df.index_points_group(lidar_xyz, cross_idx)
         self_pts = torch.cat((self_coord, self_feat), dim=-1) * mask
         cross_pts = torch.cat((cross_coord, cross_feat), dim=-1) * mask
+
+        # draw matching to tensorboard
+        gt_boxes = x['batch']['gt_boxes']
+
+        fig = draw_match(cross_coord, self_coord, \
+            cross_idx, self_idx, mask, draw_match=True, \
+                bbox=gt_boxes, c_names=self.class_names)
+        self.tb_log.add_figure('matching', fig)
+
+        plt.close()
+        fig = draw_match(lidar_xyz, radar_xyz, cross_idx, self_idx, mask, draw_match=False)
+        self.tb_log.add_figure('raw_pointcloud', fig)
+        plt.close()
+        draw_match_in_one(cross_coord, self_coord, cross_idx, self_idx, mask, self.tb_log, draw_match=True)
         if torch.isnan(self_pts).sum() > 0:
             print('idx error in self_pts')
             raise RuntimeError
@@ -430,6 +462,9 @@ class DomainCrossOver(nn.Module):
         radar_feat = bat_feats[-1]
         att_xyzs = attach_dict['encoder_xyz']
         bat_xyzs = batch_dict['encoder_xyz']
+        # att_xyzs = attach_dict['centers']
+        # bat_xyzs = batch_dict['centers']
+        
         lidar_xyz = att_xyzs[-1]
         radar_xyz = bat_xyzs[-1]
         if torch.isnan(radar_xyz).sum() > 0:
@@ -522,6 +557,70 @@ class mlp_bn_relu(nn.Module):
     def forward(self, x):
         return self.net(x)
 
-        
+def draw_match(lidar, radar, lidar_idx, radar_idx, mask, draw_match=True, \
+    bbox=None, c_names=None):
+    # draw the first batch
+    lidar_pts = lidar[0, :, :].cpu().numpy().reshape([-1, 3])
+    radar_pts = radar[0, :, :].cpu().numpy().reshape([-1, 3])
+    mask_match = mask[0, :, :].cpu().numpy().reshape([-1])
+    match_idx = np.where(mask_match == 1)[0]
+    # l_idx = lidar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
+    # r_idx = radar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
+    # x, y only
+    # l_pts = lidar_pts[l_idx, :2]
+    # r_pts = radar_pts[r_idx, :2]
+    l_pts = lidar_pts[match_idx, :2]
+    r_pts = radar_pts[match_idx, :2]
+    fig, ax1, ax2 = draw_two_pointcloud(lidar_pts, radar_pts, 'lidar', 'radar')
+    if draw_match:
+        for i in range(mask_match.sum()):
+            xyA = l_pts[i, :]
+            xyB = r_pts[i, :]
+            draw_cross_line(xyA, xyB, fig, ax1, ax2)
 
+    if bbox is not None:
+        raw_bbox = bbox[0, :, :].cpu().numpy()
+        rec_list = boxes2rec(raw_bbox, c_names)
+        for rec in rec_list:
+            ax1.add_patch(rec)
+        rec_list = boxes2rec(raw_bbox, c_names)
+        for rec in rec_list:
+            ax2.add_patch(rec)
+    return fig
+
+def draw_match_in_one(lidar, radar, lidar_idx, radar_idx, mask, tb_log, draw_match=True):
+    # draw the first batch
+    lidar_pts = lidar[0, :, :].cpu().numpy().reshape([-1, 3])
+    radar_pts = radar[0, :, :].cpu().numpy().reshape([-1, 3])
+    mask_match = mask[0, :, :].cpu().numpy().reshape([-1])
+    match_idx = np.where(mask_match == 1)[0]
+    # l_idx = lidar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
+    # r_idx = radar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
+    # # x, y only
+    # l_pts = lidar_pts[l_idx, :2]
+    # r_pts = radar_pts[r_idx, :2]
+    l_pts = lidar_pts[match_idx, :2]
+    r_pts = radar_pts[match_idx, :2]
+    fig = plt.figure(dpi=150)
+    ax = fig.add_subplot()
+
+    ax.scatter(l_pts[:,0], l_pts[:,1], c='cyan', s=10)
+    ax.scatter(r_pts[:,0], r_pts[:,1], c='gold', s=10)
+    drawBEV(ax, lidar_pts, radar_pts, None, None, 'match')
+    if draw_match:
+        for i in range(mask_match.sum()):
+            xyA = l_pts[i, :]
+            xyB = r_pts[i, :]
+            # draw_cross_line(xyA, xyB, fig, ax, ax)
+            x_values = (xyA[0], xyB[0])
+            y_values = (xyA[1], xyB[1])
+            ax.plot(x_values, y_values, '-', color='orange')
+    # if tb_log is not None:
+    tb_log.add_figure('one_fig_match', fig)
+    plt.close()
+    fig = plt.figure(dpi=150)
+    ax = fig.add_subplot()
+    drawBEV(ax, l_pts, r_pts, None, None, 'matched_pts')
+    tb_log.add_figure('matched_pts', fig)
+    plt.close()
     

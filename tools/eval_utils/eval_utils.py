@@ -1,3 +1,4 @@
+from distutils.log import debug
 import pickle
 import time
 
@@ -59,6 +60,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     center_origin_dict = {}
     ip_dict = {}
     det_dict = {}
+    match_dict = {}
+    lidar_center_dict = {}
+    lidar_preds_dict = {}
+    radar_preds_dict = {}
+    radar_label_dict = {}
     init_flag = False
     for i, batch_dict in enumerate(dataloader):
         load_data_to_gpu(batch_dict)
@@ -68,25 +74,38 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             pred_dicts, ret_dict = model(batch_dict)
             duration = time.time() - start_run_time
             frame_ids += list(batch_dict['frame_id'])
+            if hasattr(model, 'debug'):
+                debug = model.debug
+            else:
+                debug = False
             save_center = ('centers' in batch_dict)
 
             if save_center:
                 centers = batch_dict['centers'].cpu().numpy()
                 centers_origin = batch_dict['centers_origin'].cpu().numpy()
                 points = batch_dict['points'].cpu().numpy()
+
+
                 center_dict[frame_ids[-1]] = centers
                 center_origin_dict[frame_ids[-1]] = centers_origin
                 ip_dict[frame_ids[-1]] = points
-
                 # pointwise classification
-                radar_idx = batch_dict['radar_idx'].cpu().numpy().reshape([-1])
-                lidar_idx = batch_dict['lidar_idx'].cpu().numpy().reshape([-1])
-                mask = batch_dict['mask'].cpu().numpy().reshape([-1])
-                lidar_center = batch_dict['lidar_centers'].cpu().numpy()
-                lidar_preds = batch_dict['lidar_preds'][2]
-                radar_cls_label = batch_dict['sa_ins_labels']
-                radar_preds = batch_dict['sa_ins_preds'][2]
-                print('saving debug result')
+                if debug:
+                    radar_idx = batch_dict['radar_idx'].cpu().numpy().reshape([-1, 1])
+                    lidar_idx = batch_dict['lidar_idx'].cpu().numpy().reshape([-1, 1])
+                    mask = batch_dict['mask'].cpu().numpy().reshape([-1, 1])
+                    matches = np.concatenate((radar_idx, lidar_idx, mask), axis=1)
+                    lidar_center = batch_dict['lidar_centers'].cpu().numpy()
+                    lidar_preds = batch_dict['lidar_preds'][2]
+                    radar_cls_label = batch_dict['sa_ins_labels']
+                    radar_preds = batch_dict['sa_ins_preds'][2]
+                    # print('saving debug result')
+
+                    match_dict[frame_ids[-1]] = matches
+                    lidar_center_dict[frame_ids[-1]] = lidar_center
+                    lidar_preds_dict[frame_ids[-1]] = lidar_preds
+                    radar_preds_dict[frame_ids[-1]] = radar_preds
+                    radar_label_dict[frame_ids[-1]] = radar_cls_label
                 
 
         disp_dict = {}
@@ -171,15 +190,37 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         pickle.dump(det_dict, f)
     
     if save_center:
-        # save centers 
-        with open(result_dir / 'centers.pkl', 'wb') as f:
-            pickle.dump(center_dict, f)
-        # save centers_origin
-        with open(result_dir / 'centers_origin.pkl', 'wb') as f:
-            pickle.dump(center_origin_dict, f)
-        # save input points
-        with open(result_dir / 'points.pkl', 'wb') as f:
-            pickle.dump(ip_dict, f)
+
+        save_name_list = ('centers', 'centers_origin', 'points', 'match', 'lidar_center', 'lidar_preds', 'radar_preds', 'radar_label')
+        save_dict_list = (center_dict, center_origin_dict, ip_dict, match_dict, lidar_center_dict, lidar_preds_dict, radar_preds_dict, radar_label_dict)
+        '''
+        center_dict = {}
+        center_origin_dict = {}
+        ip_dict = {}
+        match_dict = {}
+        lidar_center_dict = {}
+        lidar_preds_dict = {}
+        radar_preds_dict = {}
+        radar_label_dict = {}
+        '''
+        # # save centers 
+        # with open(result_dir / 'centers.pkl', 'wb') as f:
+        #     pickle.dump(center_dict, f)
+        # # save centers_origin
+        # with open(result_dir / 'centers_origin.pkl', 'wb') as f:
+        #     pickle.dump(center_origin_dict, f)
+        # # save input points
+        # with open(result_dir / 'points.pkl', 'wb') as f:
+        #     pickle.dump(ip_dict, f)
+
+        for i, name in enumerate(save_name_list):
+            save_data = save_dict_list[i]
+            save_name = result_dir / (name + '.pkl')
+            with open(save_name, 'wb') as f:
+                pickle.dump(save_data, f)
+            
+
+
     # save frame ids
     with open(result_dir / 'frame_ids.txt', 'w') as f:
         for id in frame_ids: 

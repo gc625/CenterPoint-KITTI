@@ -31,9 +31,14 @@ __all__ = {
 }
 
 
-def build_detector(model_cfg, num_class, dataset):
-    model = __all__[model_cfg.NAME](
-        model_cfg=model_cfg, num_class=num_class, dataset=dataset
-    )
-
+def build_detector(model_cfg, num_class, dataset, tb_log=None):
+    try: 
+    
+        model = __all__[model_cfg.NAME](
+            model_cfg=model_cfg, num_class=num_class, dataset=dataset, tb_log=tb_log
+        )
+    except:
+            model = __all__[model_cfg.NAME](
+            model_cfg=model_cfg, num_class=num_class, dataset=dataset
+        )
     return model
