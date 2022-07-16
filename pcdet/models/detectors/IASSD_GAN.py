@@ -133,6 +133,7 @@ class IASSD_GAN(Detector3DTemplate):
         fig = draw_match(cross_coord, self_coord, \
             cross_idx, self_idx, mask, draw_match=True, \
                 bbox=gt_boxes, c_names=self.class_names)
+                
         self.tb_log.add_figure('matching', fig)
 
         plt.close()
@@ -560,9 +561,9 @@ class mlp_bn_relu(nn.Module):
 def draw_match(lidar, radar, lidar_idx, radar_idx, mask, draw_match=True, \
     bbox=None, c_names=None):
     # draw the first batch
-    lidar_pts = lidar[0, :, :].cpu().numpy().reshape([-1, 3])
-    radar_pts = radar[0, :, :].cpu().numpy().reshape([-1, 3])
-    mask_match = mask[0, :, :].cpu().numpy().reshape([-1])
+    lidar_pts = lidar[0, :, :].detach().cpu().numpy().reshape([-1, 3])
+    radar_pts = radar[0, :, :].detach().cpu().numpy().reshape([-1, 3])
+    mask_match = mask[0, :, :].detach().cpu().numpy().reshape([-1])
     match_idx = np.where(mask_match == 1)[0]
     # l_idx = lidar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
     # r_idx = radar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
@@ -590,9 +591,9 @@ def draw_match(lidar, radar, lidar_idx, radar_idx, mask, draw_match=True, \
 
 def draw_match_in_one(lidar, radar, lidar_idx, radar_idx, mask, tb_log, draw_match=True):
     # draw the first batch
-    lidar_pts = lidar[0, :, :].cpu().numpy().reshape([-1, 3])
-    radar_pts = radar[0, :, :].cpu().numpy().reshape([-1, 3])
-    mask_match = mask[0, :, :].cpu().numpy().reshape([-1])
+    lidar_pts = lidar[0, :, :].detach().cpu().numpy().reshape([-1, 3])
+    radar_pts = radar[0, :, :].detach().cpu().numpy().reshape([-1, 3])
+    mask_match = mask[0, :, :].detach().cpu().numpy().reshape([-1])
     match_idx = np.where(mask_match == 1)[0]
     # l_idx = lidar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])
     # r_idx = radar_idx[0, :, :].cpu().numpy()[match_idx, :].reshape([-1])

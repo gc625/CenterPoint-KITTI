@@ -109,6 +109,11 @@ class KittiDataset(DatasetTemplate):
         calib_file = self.root_split_path / 'calib' / ('%s.txt' % idx)
         assert calib_file.exists()
         return calibration_kitti.Calibration(calib_file)
+    
+    def get_attach_calib(self, idx):
+        calib_file = self.root_split_path / 'attach_calib' / ('%s.txt' % idx)
+        assert calib_file.exists()
+        return calibration_kitti.Calibration(calib_file)
 
     def get_road_plane(self, idx):
         plane_file = self.root_split_path / 'planes' / ('%s.txt' % idx)
@@ -162,7 +167,7 @@ class KittiDataset(DatasetTemplate):
             image_info = {'image_idx': sample_idx, 'image_shape': self.get_image_shape(sample_idx)}
             info['image'] = image_info
             calib = self.get_calib(sample_idx)
-
+            
             P2 = np.concatenate([calib.P2, np.array([[0., 0., 0., 1.]])], axis=0)
             R0_4x4 = np.zeros([4, 4], dtype=calib.R0.dtype)
             R0_4x4[3, 3] = 1.
@@ -384,10 +389,15 @@ class KittiDataset(DatasetTemplate):
 
         points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)
+        
         if self.use_attach & self.training:
             # print('loading attach lidar')
+            # also get calib for lidar
+            attach_calib = self.get_attach_calib(sample_idx)
             attach = self.get_attach_lidar(sample_idx)
+            # if self.dataset_cfg.FOV_POINTS_ONLY:
         elif self.debug:
+            attach_calib = self.get_attach_calib(sample_idx)
             attach = self.get_attach_lidar(sample_idx)
         else:
             # print('not loading attach lidar')
@@ -397,6 +407,19 @@ class KittiDataset(DatasetTemplate):
             pts_rect = calib.lidar_to_rect(points[:, 0:3])
             fov_flag = self.get_fov_flag(pts_rect, img_shape, calib)
             points = points[fov_flag]
+            if (self.use_attach and self.training ) or self.debug:
+                attach_pts_rec = attach_calib.lidar_to_rect(attach[:, 0:3])
+                attach_fov_flag = self.get_fov_flag(attach_pts_rec, img_shape, attach_calib)
+                attach_pts_rec = attach_pts_rec[attach_fov_flag]
+                attach_tranformed = attach_calib.rect_to_lidar(attach_pts_rec)
+                # attach = attach_tranformed
+                attach_fov = attach[attach_fov_flag]
+                attach_feature = attach_fov[:, 3:]
+                attach = np.concatenate((attach_tranformed, attach_feature), axis=-1)
+                
+
+                
+
 
         input_dict = {
             'points': points,

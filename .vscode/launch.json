@@ -12,10 +12,10 @@
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": [
-                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/all_cls_vcomp/IA-SSD-GAN-vod.yaml", 
-                "--epoch", "102", 
+                "--cfg_file", "/root/dj/code/CenterPoint-KITTI/tools/cfgs/kitti_models/IA-SSD-GAN-vod.yaml", 
+                "--epoch", "100", 
                 "--workers", "8", 
-                "--extra_tag", "all_cls_vcomp",
+                "--extra_tag", "all_cls_vcomp_vis",
                 "--batch_size", "16",
                 "--save_to_file", "False",
                 "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/all_cls_vcomp/ckpt/checkpoint_epoch_100.pth"
