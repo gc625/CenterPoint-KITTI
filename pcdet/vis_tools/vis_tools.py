@@ -114,7 +114,7 @@ def boxes2rec(bbox, c_names=None):
 
     return rec_list
 
-def drawBEV(ax, pts, centers, annos, frame_id, ax_title):
+def drawBEV(ax, pts, centers, annos, frame_id, ax_title, set_legend=False):
 
 
     # 3. draw bbx
@@ -136,11 +136,11 @@ def drawBEV(ax, pts, centers, annos, frame_id, ax_title):
         cx = centers[:, 0]
         cy = centers[:, 1]
         ax.scatter(cx, cy, c='red', s=0.1)
-
-    legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
-    legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
-                          markerfacecolor='r', markersize=10)]
-    ax.legend(handles=legend_elements, loc=1)
+    if set_legend:
+        legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
+        legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
+                            markerfacecolor='r', markersize=10)]
+        ax.legend(handles=legend_elements, loc=1)
     ax.set_title(ax_title)
 
 def drawBEV_match(ax, pts, centers, annos, color_dict, frame_id, ax_title):

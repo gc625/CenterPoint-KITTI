@@ -411,7 +411,7 @@ class KittiDataset(DatasetTemplate):
                 attach_pts_rec = attach_calib.lidar_to_rect(attach[:, 0:3])
                 attach_fov_flag = self.get_fov_flag(attach_pts_rec, img_shape, attach_calib)
                 attach_pts_rec = attach_pts_rec[attach_fov_flag]
-                attach_tranformed = attach_calib.rect_to_lidar(attach_pts_rec)
+                attach_tranformed = calib.rect_to_lidar(attach_pts_rec)
                 # attach = attach_tranformed
                 attach_fov = attach[attach_fov_flag]
                 attach_feature = attach_fov[:, 3:]
