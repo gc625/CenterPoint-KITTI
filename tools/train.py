@@ -220,7 +220,8 @@ def main():
         max_ckpt_save_num=args.max_ckpt_save_num,
         merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
         logger=logger,
-        eval_epoch=args.eval_epoch
+        eval_epoch=args.eval_epoch,
+        eval_output_dir=eval_output_dir
     )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
