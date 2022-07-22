@@ -80,7 +80,7 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1):
+                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, eval_save=False):
     accumulated_iter = start_iter
     # freeze some layers
     freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
@@ -147,8 +147,8 @@ def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr
             if cur_epoch % eval_epoch == 0:
                 # start evaluation
                 eval_utils.eval_one_epoch(
-                    cfg, model, test_loader, cur_epoch, logger, dist_test=False,
-                    result_dir=eval_output_dir, save_to_file=False
+                    cfg, model, test_loader, trained_epoch, logger, dist_test=False,
+                    result_dir=eval_output_dir, save_to_file=eval_save
                 )
 
 
