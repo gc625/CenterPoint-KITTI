@@ -1,7 +1,7 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset.yaml
+    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset2.yaml
 
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
@@ -25,7 +25,6 @@ MODEL:
     BACKBONE_3D:
         NAME: SSDBackbone
         SA_CONFIG:
-
             NPOINTS: [[512], [512], [256, 256], [128, 0], [-1], [128]]
             RADIUS: [[0.2,0.4,0.8], [0.4,0.8,1.6], [1.6,3.2,4.8], [], [], [4.8, 6.4]]
             NSAMPLE: [[32,32,64], [32,32,64], [32,32,32], [], [], [16, 32]]

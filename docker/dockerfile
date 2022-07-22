@@ -162,7 +162,7 @@ WORKDIR /root
 # A weired problem that hasn't been solved yet
 # RUN pip uninstall -y SharedArray && \
 #     pip install SharedArray
-RUN cd / && git clone https://github.com/gc625/CenterPoint-KITTI.git
+RUN cd / && git clone https://github.com/DJNing/CenterPoint-KITTI.git
 RUN pip install -r /CenterPoint-KITTI/requirements.txt 
 RUN pip install spconv-cu111
 
