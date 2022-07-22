@@ -199,6 +199,8 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         )
 
     logger.info(result_str)
+    logger.info('mAP=%s' % result_dict['mAP'])
+    logger.info('mAOS=%s' % result_dict['mAOS'])
     ret_dict.update(result_dict)
     # save gt, prediction, final points origin, final points new coordinate
     
