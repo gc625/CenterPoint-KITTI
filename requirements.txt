@@ -6,6 +6,8 @@ easydict
 pyyaml
 scikit-image
 tqdm
-open3d
+ipdb
+sklearn
 k3d
-scikit-learn
+matplotlib
+

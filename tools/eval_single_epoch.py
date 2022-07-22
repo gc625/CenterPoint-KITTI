@@ -109,7 +109,7 @@ def main():
     if cfg.LOCAL_RANK == 0:
         os.system('cp %s %s' % (args.cfg_file, output_dir))
 
-    tb_log = SummaryWriter(log_dir=str(output_dir / 'tensorboard')) if cfg.LOCAL_RANK == 0 else None
+    tb_log = SummaryWriter(log_dir=str(output_dir / 'tensorboard_eval')) if cfg.LOCAL_RANK == 0 else None
 
     # -----------------------create dataloader & network & optimizer---------------------------
     train_set, train_loader, train_sampler = build_dataloader(
@@ -124,9 +124,10 @@ def main():
     )
 
     # cfg.MODEL['DISABLE_ATTACH'] = True
-    cfg.DATA_CONFIG['DEBUG'] = cfg.MODEL['DEBUG']
+    cfg.DATA_CONFIG['DEBUG'] = cfg.MODEL.get('DEBUG', False)
     cfg.DATA_CONFIG['USE_ATTACH'] = cfg.get('USE_ATTACH', False)
-    model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set)
+    cfg.MODEL['CLASS_NAMES'] = cfg.CLASS_NAMES
+    model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set, tb_log=tb_log)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
@@ -220,7 +221,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=1,
+        batch_size=2,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 

@@ -53,7 +53,7 @@ DATA_AUGMENTOR:
 
 POINT_FEATURE_ENCODING: {
     encoding_type: absolute_coordinates_encoding,
-    used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
+    used_feature_list: ['x', 'y', 'z', 'RCS'],
     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'] 
 }
 

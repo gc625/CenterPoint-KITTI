@@ -1,6 +1,4 @@
 # %%
-from cProfile import label
-from logging import root
 import matplotlib.pyplot as plt
 import pickle 
 from pathlib import Path as P
@@ -105,10 +103,11 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title):
     
     for rec in rec_list:
         ax.add_patch(rec)
-    # 1. draw original points
-    x = pts[:, 1]
-    y = pts[:, 2]
-    ax.scatter(x, y, c='black', s=0.1)
+    # 1. draw original points if exist
+    if pts is not None:
+        x = pts[:, 1]
+        y = pts[:, 2]
+        ax.scatter(x, y, c='black', s=0.1)
     # 2. overlay centers
     if centers is not None:
         cx = centers[:, 1]
@@ -135,7 +134,7 @@ if __name__ == '__main__':
     
     
     # trans-ssd
-    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/domain_cross_init_car/eval/checkpoint_epoch_80')
+    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_vcomp/eval/checkpoint_epoch_100')
     # ia-ssd
     # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_all/eval/checkpoint_epoch_100')
     
@@ -143,7 +142,7 @@ if __name__ == '__main__':
 
     color_dict = {}
 
-    gt_save_dir = root_path / 'GT_bev'
+    gt_save_dir = root_path / 'GT_all_bev'
     pred_save_dir = root_path / 'pred_bev'
     gt_save_dir.mkdir(exist_ok=True)
     pred_save_dir.mkdir(exist_ok=True)
@@ -170,6 +169,14 @@ if __name__ == '__main__':
     with open(str(root_path / 'points.pkl'), 'rb') as f:
         points = pickle.load(f)
     
+    data_dict = {}
+    def load_data(name):
+        with open(str(root_path / (name + '.pkl')), 'rb') as f:
+            data = pickle.load(f)
+        return data
+    # save_name_list = ('centers', 'centers_origin', 'points', 'match', 'lidar_center', 'lidar_preds', 'radar_preds', 'radar_label')
+    # for name in save_name_list:
+    #     data_dict[name] = load_data(name)
     # test_recs = anno2plt(dt['00000'][0], color_dict, 2, 0)
 
     # print(type(points))
@@ -195,12 +202,12 @@ if __name__ == '__main__':
         ax.clear()
         
         # draw pred
-        drawBEV(ax, points[id], centers_origin[id], dt[id], color_dict, id, 'pred')
-        pred_img_full_fname = str(pred_save_dir / img_fname)
-        plt.xlim(-0,75)
-        plt.ylim(-30,30)
-        plt.savefig(pred_img_full_fname)
-        ax.clear()
+        # drawBEV(ax, None, centers_origin[id], dt[id], color_dict, id, 'pred')
+        # pred_img_full_fname = str(pred_save_dir / img_fname)
+        # plt.xlim(-0,75)
+        # plt.ylim(-30,30)
+        # plt.savefig(pred_img_full_fname)
+        # ax.clear()
         
     
     # plt.show()
