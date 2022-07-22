@@ -199,7 +199,15 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         )
 
     logger.info(result_str)
-    logger.info('mAP=%s' % result_dict['mAP'])
+    logger.info('*************** Evaluation Summary of EPOCH %s *****************' % epoch_id)
+    logger.info('mAP:')
+    logger.info('   bbox=%s' % result_dict['mAP_bbox'])
+    logger.info('   bev=%s' % result_dict['mAP_bev'])
+    logger.info('   3d=%s' % result_dict['mAP_3d'])
+    logger.info('mAP@R40:')
+    logger.info('   bbox=%s' % result_dict['mAP_R40_bbox'])
+    logger.info('   bev=%s' % result_dict['mAP_R40_bev'])
+    logger.info('   3d=%s' % result_dict['mAP_R40_3d'])
     logger.info('mAOS=%s' % result_dict['mAOS'])
     ret_dict.update(result_dict)
     # save gt, prediction, final points origin, final points new coordinate
