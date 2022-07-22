@@ -686,6 +686,8 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
         gt_annos, dt_annos, current_classes, min_overlaps, compute_aos, PR_detail_dict=PR_detail_dict)
 
     ret_dict = {}
+    total_mAP = 0.0
+    total_mAOS = 0.0
     for j, curcls in enumerate(current_classes):
         # mAP threshold array: [num_minoverlap, metric, class]
         # mAP result: [num_class, num_diff, num_minoverlap]
@@ -702,11 +704,15 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
             result += print_str((f"3d   AP:{mAP3d[j, 0, i]:.4f}, "
                                  f"{mAP3d[j, 1, i]:.4f}, "
                                  f"{mAP3d[j, 2, i]:.4f}"))
+            if i % 2 == 0:
+                total_mAP += float(mAPbbox[j, 0, i])
 
             if compute_aos:
                 result += print_str((f"aos  AP:{mAPaos[j, 0, i]:.2f}, "
                                      f"{mAPaos[j, 1, i]:.2f}, "
                                      f"{mAPaos[j, 2, i]:.2f}"))
+                if i % 2 == 0:
+                    total_mAOS += float(mAPaos[j, 0, i])
                 # if i == 0:
                    # ret_dict['%s_aos/easy' % class_to_name[curcls]] = mAPaos[j, 0, 0]
                    # ret_dict['%s_aos/moderate' % class_to_name[curcls]] = mAPaos[j, 1, 0]
@@ -753,7 +759,8 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
                 ret_dict['%s_image/easy_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 0, 0]
                 ret_dict['%s_image/moderate_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 1, 0]
                 ret_dict['%s_image/hard_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 2, 0]
-
+    ret_dict['mAOS'] = total_mAOS / 3
+    ret_dict['mAP'] = total_mAP / 3
     return result, ret_dict
 
 

@@ -46,6 +46,7 @@ def parse_config():
     parser.add_argument('--save_to_file', default=False, help='')
     parser.add_argument('--freeze_part', type=bool, default=False, help='load head params only and freeze them during training')
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
+    parser.add_argument('--eval_epoch', type=int, default=1, help='number of epoch for eval once')
 
     args = parser.parse_args()
     print(args.freeze_part)
@@ -184,6 +185,17 @@ def main():
         last_epoch=last_epoch, optim_cfg=cfg.OPTIMIZATION
     )
 
+    test_set, test_loader, sampler = build_dataloader(
+        dataset_cfg=cfg.DATA_CONFIG,
+        class_names=cfg.CLASS_NAMES,
+        # batch_size=args.batch_size,
+        batch_size=1,
+        dist=dist_train, workers=args.workers, logger=logger, training=False
+    )
+
+    eval_output_dir = output_dir / 'eval' / 'eval_with_train'
+    eval_output_dir.mkdir(parents=True, exist_ok=True)
+
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
@@ -191,6 +203,8 @@ def main():
         model,
         optimizer,
         train_loader,
+        test_loader,
+        cfg,
         model_func=model_fn_decorator(),
         lr_scheduler=lr_scheduler,
         optim_cfg=cfg.OPTIMIZATION,
@@ -205,7 +219,9 @@ def main():
         ckpt_save_interval=args.ckpt_save_interval,
         max_ckpt_save_num=args.max_ckpt_save_num,
         merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch,
-        logger=logger
+        logger=logger,
+        eval_epoch=args.eval_epoch,
+        eval_output_dir=eval_output_dir
     )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
@@ -213,15 +229,7 @@ def main():
 
     logger.info('**********************Start evaluation %s/%s(%s)**********************' %
                 (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    test_set, test_loader, sampler = build_dataloader(
-        dataset_cfg=cfg.DATA_CONFIG,
-        class_names=cfg.CLASS_NAMES,
-        # batch_size=args.batch_size,
-        batch_size=1,
-        dist=dist_train, workers=args.workers, logger=logger, training=False
-    )
-    eval_output_dir = output_dir / 'eval' / 'eval_with_train'
-    eval_output_dir.mkdir(parents=True, exist_ok=True)
+
     args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     repeat_eval_ckpt(
