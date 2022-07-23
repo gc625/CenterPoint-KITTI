@@ -17,15 +17,21 @@ def statistics_info(cfg, ret_dict, metric, disp_dict):
     metric['gt_num'] += ret_dict.get('gt', 0)
     min_thresh = cfg.MODEL.POST_PROCESSING.RECALL_THRESH_LIST[0]
     disp_dict['recall_%s' % str(min_thresh)] = \
-        '(%d, %d) / %d' % (metric['recall_roi_%s' % str(min_thresh)], metric['recall_rcnn_%s' % str(min_thresh)], metric['gt_num'])
+        '(%d, %d) / %d' % (
+            metric['recall_roi_%s' % str(min_thresh)], metric['recall_rcnn_%s' % str(min_thresh)], metric['gt_num'])
 
 
-def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None, runtime_gt=False):
+def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
+                   runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     final_output_dir = result_dir / 'final_result' / 'data'
     if save_to_file:
         final_output_dir.mkdir(parents=True, exist_ok=True)
+
+    best_model_output_dir = result_dir / 'best_eval'
+    if save_best_eval:
+        best_model_output_dir.mkdir(parents=True, exist_ok=True)
 
     metric = {
         'gt_num': 0,
@@ -43,9 +49,9 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         num_gpus = torch.cuda.device_count()
         local_rank = cfg.LOCAL_RANK % num_gpus
         model = torch.nn.parallel.DistributedDataParallel(
-                model,
-                device_ids=[local_rank],
-                broadcast_buffers=False
+            model,
+            device_ids=[local_rank],
+            broadcast_buffers=False
         )
     model.eval()
 
@@ -85,7 +91,6 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 centers_origin = batch_dict['centers_origin'].cpu().numpy()
                 points = batch_dict['points'].cpu().numpy()
 
-
                 center_dict[frame_ids[-1]] = centers
                 center_origin_dict[frame_ids[-1]] = centers_origin
                 ip_dict[frame_ids[-1]] = points
@@ -106,7 +111,6 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                     lidar_preds_dict[frame_ids[-1]] = lidar_preds
                     radar_preds_dict[frame_ids[-1]] = radar_preds
                     radar_label_dict[frame_ids[-1]] = radar_cls_label
-                
 
         disp_dict = {}
         sum_duration += duration
@@ -131,10 +135,10 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
     logger.info('*************** Performance of EPOCH %s *****************' % epoch_id)
     sec_per_example = (time.time() - start_time) / len(dataloader.dataset)
-    peak_memory = torch.cuda.max_memory_allocated() / 1024 # convert to KByte
-    
+    peak_memory = torch.cuda.max_memory_allocated() / 1024  # convert to KByte
+
     logger.info('Peak memory usage: %.4f KB.' % peak_memory)
-    peak_memory = peak_memory/1024 # convert to MByte
+    peak_memory = peak_memory / 1024  # convert to MByte
     logger.info('Peak memory usage: %.4f MB.' % peak_memory)
     logger.info('Average run time per scan: %.4f ms' % (sum_duration / len(dataloader.dataset) * 1000))
     logger.info('Generate label finished(sec_per_example: %.4f second).' % sec_per_example)
@@ -164,10 +168,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     logger.info('Average predicted number of objects(%d samples): %.3f'
                 % (len(det_annos), total_pred_objects / max(1, len(det_annos))))
 
-    logger.info('******************Saving result to dir: ' + str(result_dir) + '**********************')
+    if save_to_file:
+        logger.info('******************Saving result to dir: ' + str(result_dir) + '**********************')
 
-    with open(result_dir / 'result.pkl', 'wb') as f:
-        pickle.dump(det_annos, f)
+        with open(result_dir / 'result.pkl', 'wb') as f:
+            pickle.dump(det_annos, f)
 
     # gt pkl
     import copy
@@ -182,17 +187,22 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     gt_annos = []
     for id in frame_ids:
         gt_annos += [gt_dict[id]]
-    with open(result_dir / 'gt.pkl', 'wb') as f:
-        pickle.dump(gt_dict, f)
 
-    # save detection
-    with open(result_dir / 'dt.pkl', 'wb') as f:
-        pickle.dump(det_dict, f)
-    
+    if save_to_file:
+        with open(result_dir / 'gt.pkl', 'wb') as f:
+            pickle.dump(gt_dict, f)
+
+        # save detection
+        with open(result_dir / 'dt.pkl', 'wb') as f:
+            pickle.dump(det_dict, f)
+
     if save_center:
 
-        save_name_list = ('centers', 'centers_origin', 'points', 'match', 'lidar_center', 'lidar_preds', 'radar_preds', 'radar_label')
-        save_dict_list = (center_dict, center_origin_dict, ip_dict, match_dict, lidar_center_dict, lidar_preds_dict, radar_preds_dict, radar_label_dict)
+        save_name_list = (
+            'centers', 'centers_origin', 'points', 'match', 'lidar_center', 'lidar_preds', 'radar_preds', 'radar_label')
+        save_dict_list = (
+            center_dict, center_origin_dict, ip_dict, match_dict, lidar_center_dict, lidar_preds_dict, radar_preds_dict,
+            radar_label_dict)
         '''
         center_dict = {}
         center_origin_dict = {}
@@ -218,13 +228,13 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             save_name = result_dir / (name + '.pkl')
             with open(save_name, 'wb') as f:
                 pickle.dump(save_data, f)
-            
 
+    if save_to_file:
 
-    # save frame ids
-    with open(result_dir / 'frame_ids.txt', 'w') as f:
-        for id in frame_ids: 
-            f.write(str(id) + ',')
+        # save frame ids
+        with open(result_dir / 'frame_ids.txt', 'w') as f:
+            for id in frame_ids:
+                f.write(str(id) + ',')
 
     try:
         result_str, result_dict = dataset.evaluation(
@@ -252,10 +262,53 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     logger.info('mAOS=%s' % result_dict['mAOS'])
     ret_dict.update(result_dict)
     # save gt, prediction, final points origin, final points new coordinate
-    
-    logger.info('Result is save to %s' % result_dir)
+
+    if save_best_eval and result_dict['mAP_3d'] > best_mAP_3d:
+        logger.info('>>>>>> Saving best mAP_3d model save to %s <<<<<<' % result_dir)
+        ckpt_name = best_model_output_dir / 'best_epoch_checkpoint'
+        save_checkpoint(
+            checkpoint_state(model, None, epoch_id, None), filename=ckpt_name,
+        )
+
     logger.info('****************Evaluation done.*****************')
     return ret_dict
+
+
+def model_state_to_cpu(model_state):
+    model_state_cpu = type(model_state)()  # ordered dict
+    for key, val in model_state.items():
+        model_state_cpu[key] = val.cpu()
+    return model_state_cpu
+
+
+def checkpoint_state(model=None, optimizer=None, epoch=None, it=None):
+    optim_state = optimizer.state_dict() if optimizer is not None else None
+    if model is not None:
+        if isinstance(model, torch.nn.parallel.DistributedDataParallel):
+            model_state = model_state_to_cpu(model.module.state_dict())
+        else:
+            model_state = model.state_dict()
+    else:
+        model_state = None
+
+    try:
+        import pcdet
+        version = 'pcdet+' + pcdet.__version__
+    except:
+        version = 'none'
+
+    return {'epoch': epoch, 'it': it, 'model_state': model_state, 'optimizer_state': optim_state, 'version': version}
+
+
+def save_checkpoint(state, filename='checkpoint'):
+    if False and 'optimizer_state' in state:
+        optimizer_state = state['optimizer_state']
+        state.pop('optimizer_state', None)
+        optimizer_filename = '{}_optim.pth'.format(filename)
+        torch.save({'optimizer_state': optimizer_state}, optimizer_filename)
+
+    filename = '{}.pth'.format(filename)
+    torch.save(state, filename)
 
 
 if __name__ == '__main__':
