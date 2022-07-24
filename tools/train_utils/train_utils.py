@@ -80,7 +80,7 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, eval_save=False):
+                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, save_best_eval=False):
     accumulated_iter = start_iter
     # freeze some layers
     freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
@@ -99,6 +99,7 @@ def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr
                                 param.requires_grad = False
                                 if logger is not None:
                                     logger.info('freeze params in {name}'.format(name=name))
+    best_eval_mAP_3d = 0.0
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:
@@ -144,12 +145,13 @@ def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr
                 )
 
             # run eval
-            if cur_epoch % eval_epoch == 0:
+            if trained_epoch % eval_epoch == 0:
                 # start evaluation
-                eval_utils.eval_one_epoch(
+                ret_dict = eval_utils.eval_one_epoch(
                     cfg, model, test_loader, trained_epoch, logger, dist_test=False,
-                    result_dir=eval_output_dir, save_to_file=eval_save
+                    result_dir=eval_output_dir, save_best_eval=save_best_eval, best_mAP_3d=best_eval_mAP_3d
                 )
+                best_eval_mAP_3d = max(best_eval_mAP_3d, float(ret_dict['mAP_3d']))
 
 
 def model_state_to_cpu(model_state):
