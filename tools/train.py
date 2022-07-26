@@ -142,6 +142,7 @@ def main():
         else:
             cfg.MODEL['FREEZE_MODE'] = cfg.FREEZE_MODE
     if args.pretrained_model is not None:
+        logger.info('===> loading pretrained model %s '%args.pretrained_model)
         if args.freeze_part:
         #     if cfg.MODEL.get('MULTIBACKBONE', False):
         #         model.load_params_from_file_singlebranch(filename=args.pretrained_model, to_cpu=dist, logger=logger, id=cfg.FREEZE_MODE)
@@ -152,9 +153,11 @@ def main():
             model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
     if cfg.get('USE_ATTACH', False):
+        logger.info('===> Loading ckpt for attached model')
         model.load_ckpt_to_attach(cfg.MODEL.ATTACH_NETWORK.CKPT_FILE, logger)
 
     if cfg.get('BACKBONE_CKPT', False):
+        logger.info('===> Loading ckpt for main backbone')
         for temp_dict in cfg.BACKBONE_CKPT:
             bb_id = temp_dict.ID
             ckpt_file = temp_dict.FILE_PATH
@@ -165,9 +168,11 @@ def main():
         it, start_epoch = model.load_params_with_optimizer(args.ckpt, to_cpu=dist, optimizer=optimizer, logger=logger)
         last_epoch = start_epoch + 1
     else:
+        
         ckpt_list = glob.glob(str(ckpt_dir / '*checkpoint_epoch_*.pth'))
         if len(ckpt_list) > 0:
             ckpt_list.sort(key=os.path.getmtime)
+            logger.info('===> Resuming training from ckpt: %s ' % ckpt_list[-1])
             it, start_epoch = model.load_params_with_optimizer(
                 ckpt_list[-1], to_cpu=dist, optimizer=optimizer, logger=logger
             )

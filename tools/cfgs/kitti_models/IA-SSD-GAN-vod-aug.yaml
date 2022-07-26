@@ -237,7 +237,10 @@ OPTIMIZATION:
     NUM_EPOCHS: 80
 
     OPTIMIZER: adam_onecycle
-    LR: 0.01
+    # try to lower the LR for fine-tuning, 
+    # we should obtain the best performance within 20 epoches
+    # If we want to train from scratch, increase the LR together with the LR_DECAY
+    LR: 0.005
     WEIGHT_DECAY: 0.01
     MOMENTUM: 0.9
 
