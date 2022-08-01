@@ -52,7 +52,7 @@ def parse_config():
     return args, cfg
 
 
-def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, save_to_file=False, result_dir=None):
+def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, save_to_file=False, result_dir=None, save_centers=False):
     # load checkpoint
     if reload:
         model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
@@ -61,7 +61,7 @@ def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id
     # start evaluation
     eval_utils.eval_one_epoch(
         cfg, model, test_loader, epoch_id, logger, dist_test=dist_test,
-        result_dir=eval_output_dir, save_to_file=save_to_file
+        result_dir=eval_output_dir, save_to_file=save_to_file, save_centers=save_centers
     )
 
 
@@ -180,6 +180,13 @@ def main():
     log_config_to_file(cfg, logger=logger)
 
     ckpt_dir = args.ckpt_dir if args.ckpt_dir is not None else output_dir / 'ckpt'
+
+    # change dataset_cfg temporary to test
+    bm_split = cfg.DATA_CONFIG.DATA_SPLIT['bench_mark']
+    bm_info = cfg.DATA_CONFIG.INFO_PATH['bench_mark']
+
+    cfg.DATA_CONFIG.DATA_SPLIT['test'] = bm_split
+    cfg.DATA_CONFIG.INFO_PATH['test'] = bm_info
 
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,

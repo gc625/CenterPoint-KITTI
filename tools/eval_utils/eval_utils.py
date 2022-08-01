@@ -22,7 +22,7 @@ def statistics_info(cfg, ret_dict, metric, disp_dict):
 
 
 def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
-                   runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0):
+                   runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
     result_dir.mkdir(parents=True, exist_ok=True)
 
     final_output_dir = result_dir / 'final_result' / 'data'
@@ -84,7 +84,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 debug = model.debug
             else:
                 debug = False
-            save_center = ('centers' in batch_dict)
+            save_center = save_centers & ('centers' in batch_dict)
 
             if save_center:
                 centers = batch_dict['centers'].cpu().numpy()

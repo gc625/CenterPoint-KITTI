@@ -389,6 +389,11 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.reverse = reverse
         out_channels = 0
         self.sample_idx = sample_idx
+        # ===========================================
+        # counter for naming saved features files
+        self.saving_cnt = 0
+        # ===========================================
+
         for i in range(len(radii)):
             radius = radii[i]
             nsample = nsamples[i]
@@ -456,14 +461,38 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         else:
             self.confidence_layers = None
 
+    def save_features(self, features, coords, xyz, save_path, frame_id):
+        ''' 
+        :param features: (B, mlp[-1], npoint, nsample)
+        :param coords: (B, 3, npoint, nsample)
+        :param xyz: group center
+        :param save_path: path/to/save
+        :param frame_id: name the file using frame id
+        '''
+        import numpy as np
+        from pathlib import Path
+        B, _, _, _ = features.shape
+        save_features = features.cpu().detach().numpy()
+        save_coords = coords.cpu().detach().numpy()
+        center_coords = xyz.cpu().detach().numpy()
+        save_data = np.concatenate((save_coords, save_features), axis=1)  
+        fname = Path(save_path) / (frame_id + '_group.npy')
+        np.save(str(fname), save_data)
 
-    def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, cls_features: torch.Tensor = None, new_xyz=None, ctr_xyz=None):
+        fname = Path(save_path) / (frame_id + '_center.npy')
+        np.save(str(fname), center_coords)
+
+        self.saving_cnt += 1
+
+    def forward(self, xyz: torch.Tensor, features: torch.Tensor = None, cls_features: torch.Tensor = None, \
+        new_xyz=None, ctr_xyz=None, save_features_dir=None, frame_id=None):
         """
         :param xyz: (B, N, 3) tensor of the xyz coordinates of the features
         :param features: (B, C, N) tensor of the descriptors of the the features
         :param cls_features: (B, N, num_class) tensor of the descriptors of the the confidence (classification) features 
         :param new_xyz: (B, M, 3) tensor of the xyz coordinates of the sampled points
-        "param ctr_xyz: tensor of the xyz coordinates of the centers 
+        :param ctr_xyz: tensor of the xyz coordinates of the centers 
+        :param save_features_dir: path to save intermediate features during inference
         :return:
             new_xyz: (B, npoint, 3) tensor of the new features' xyz
             new_features: (B, \sum_k(mlps[k][-1]), npoint) tensor of the new_features descriptors
@@ -593,8 +622,24 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         if len(self.groupers) > 0:
             for i in range(len(self.groupers)):
-                new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample)
+                # ================================== this features can be saved for analysis =======================
+
+                if (self.training is False) & (save_features_dir is not None):
+                    new_features = self.groupers[i](xyz, new_xyz, features, save_abs_coord=True)  # (B, C+3, npoint, nsample) point coordinate included        
+                    save_coords = new_features[:, -3:, : ,:]
+                    new_features = new_features[:, :-3, :, :]
+                # save coordinate from here
+                else:
+                    new_features = self.groupers[i](xyz, new_xyz, features)  # (B, C, npoint, nsample) point coordinate included
+                # save_coords = new_features[:,:3, :, :]
+                # save pre-pooling features from here
                 new_features = self.mlps[i](new_features)  # (B, mlp[-1], npoint, nsample)
+                # ==================================
+                # function to save features before further operations
+                # ==================================
+                if self.training is False:
+                    if save_features_dir is not None:
+                        self.save_features(new_features, save_coords, new_xyz, save_features_dir, frame_id)
                 if self.pool_method == 'max_pool':
                     new_features = F.max_pool2d(
                         new_features, kernel_size=[1, new_features.size(3)]

@@ -195,7 +195,7 @@ def main():
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
         # batch_size=args.batch_size,
-        batch_size=1,
+        batch_size=args.batch_size,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 

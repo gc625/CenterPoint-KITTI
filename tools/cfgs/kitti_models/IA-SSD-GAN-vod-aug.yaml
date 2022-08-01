@@ -33,6 +33,9 @@ MODEL:
         CKPT_FILE: "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
         BACKBONE_3D:
             NAME: IASSD_Backbone
+            # ========= for evaluation only ==========
+            SAVE_FEAT_DIR: '/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/attach'
+            # ========================================
             SA_CONFIG:
                 # Sampling setting:
                 NPOINT_LIST: [[4096], [1024], [512], [256], [-1], [256]]
@@ -63,6 +66,9 @@ MODEL:
     
     BACKBONE_3D:
         NAME: IASSD_Backbone
+        # ========= for evaluation only ==========
+        SAVE_FEAT_DIR: '/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/main_branch'
+        # ========================================
         SA_CONFIG:
             # Sampling setting:
             NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]

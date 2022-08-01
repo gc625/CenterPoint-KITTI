@@ -134,7 +134,7 @@ if __name__ == '__main__':
     
     
     # trans-ssd
-    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_vcomp/eval/checkpoint_epoch_100')
+    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
     # ia-ssd
     # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_all/eval/checkpoint_epoch_100')
     
@@ -189,25 +189,26 @@ if __name__ == '__main__':
 
     # 1. image with center origin and gt annos
     ids = list(gt.keys())
+    print('=====> drawing detection BEVs')
     for id in tqdm(ids):
         img_fname = str(id) + '.png'
         
         # print(id,points[id])
         # draw gt
-        drawBEV(ax, points[id], centers_origin[id], gt[id], color_dict, id, 'GT')
-        gt_img_full_fname = str(gt_save_dir / img_fname)
-        plt.xlim(-0,75)
-        plt.ylim(-30,30)
-        plt.savefig(gt_img_full_fname)
-        ax.clear()
-        
-        # draw pred
-        # drawBEV(ax, None, centers_origin[id], dt[id], color_dict, id, 'pred')
-        # pred_img_full_fname = str(pred_save_dir / img_fname)
+        # drawBEV(ax, points[id], centers_origin[id], gt[id], color_dict, id, 'GT')
+        # gt_img_full_fname = str(gt_save_dir / img_fname)
         # plt.xlim(-0,75)
         # plt.ylim(-30,30)
-        # plt.savefig(pred_img_full_fname)
+        # plt.savefig(gt_img_full_fname)
         # ax.clear()
+        
+        # draw pred
+        drawBEV(ax, points[id], centers_origin[id], dt[id], color_dict, id, 'pred')
+        pred_img_full_fname = str(pred_save_dir / img_fname)
+        plt.xlim(-0,75)
+        plt.ylim(-30,30)
+        plt.savefig(pred_img_full_fname)
+        ax.clear()
         
     
     # plt.show()
