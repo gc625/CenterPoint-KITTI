@@ -681,19 +681,28 @@ def do_eval(gt_annotations,
     return mAP_bbox, mAP_bev, mAP_3d, mAP_aos, mAP_bbox_R40, mAP_bev_R40, mAP_3d_R40, mAP_aos_R40
 
 
-def get_official_eval_result(gt_annotations, dt_annotations, current_classes, pr_detail_dict=None, custom_method=0):
+def get_official_eval_result(gt_annotations, dt_annotations, current_classes, pr_detail_dict=None, custom_method=0, is_radar=False):
     if custom_method == 0:
         print("Evaluating kitti by default")
     elif custom_method == 3:
         print("Evaluating kitti by ROI")
 
-    # Original OpenPCDet code
-    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
-                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
-                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
-    overlap_0_5 = np.array([[0.7, 0.50, 0.50, 0.7, 0.50, 0.5],  # image
-                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],  # bev
-                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])  # 3d
+    if is_radar:
+        # Original OpenPCDet code
+        overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+                                [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+                                [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
+        overlap_0_5 = np.array([[0.7, 0.50, 0.50, 0.7, 0.50, 0.5],  # image
+                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],  # bev
+                                [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])  # 3d
+        else:
+        overlap_0_7 = np.array([[0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
+                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
+                                [0.75, 0.5, 0.5, 0.7, 0.5, 0.7]])
+        overlap_0_5 = np.array([[0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
+                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
+                                [0.75, 0.5, 0.5, 0.75, 0.5, 0.5]])
+
     # class:  0,    1,    2,   3,   4,    5
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 6] = [num_overlaps, metrics, classes]
 
