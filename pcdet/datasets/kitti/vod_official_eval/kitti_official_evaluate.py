@@ -695,7 +695,7 @@ def get_official_eval_result(gt_annotations, dt_annotations, current_classes, pr
         overlap_0_5 = np.array([[0.7, 0.50, 0.50, 0.7, 0.50, 0.5],  # image
                                 [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],  # bev
                                 [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])  # 3d
-        else:
+    else:
         overlap_0_7 = np.array([[0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
                                 [0.75, 0.5, 0.5, 0.75, 0.5, 0.5],
                                 [0.75, 0.5, 0.5, 0.7, 0.5, 0.7]])
