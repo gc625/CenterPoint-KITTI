@@ -368,13 +368,17 @@ class KittiDataset(DatasetTemplate):
         if 'annos' not in self.kitti_infos[0].keys():
             return None, {}
 
-        from .kitti_object_eval_python import eval as kitti_eval
+        from .vod_official_eval import kitti_official_evaluate as vod_eval
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
-        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, self.is_radar)
 
-        return ap_result_str, ap_dict
+        evaluation_result = {}
+        evaluation_result.update(vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names))
+        evaluation_result.update(
+            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3))
+
+        return evaluation_result
 
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
