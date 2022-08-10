@@ -310,33 +310,38 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 f.write(str(id) + ',')
 
     try:
-        result_str, result_dict = dataset.evaluation(
+        eval_results = dataset.evaluation(
             det_annos, class_names, gt_annos=gt_annos,
             eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
             output_path=final_output_dir
         )
     except:
-        result_str, result_dict = dataset.evaluation(
+        eval_results = dataset.evaluation(
             det_annos, class_names,
             eval_metric=cfg.MODEL.POST_PROCESSING.EVAL_METRIC,
             output_path=final_output_dir
         )
 
-    logger.info(result_str)
     logger.info('*************** Evaluation Summary of EPOCH %s *****************' % epoch_id)
-    logger.info('mAP:')
-    logger.info('   bbox=%s' % result_dict['mAP_bbox'])
-    logger.info('   bev=%s' % result_dict['mAP_bev'])
-    logger.info('   3d=%s' % result_dict['mAP_3d'])
-    logger.info('mAP@R40:')
-    logger.info('   bbox=%s' % result_dict['mAP_R40_bbox'])
-    logger.info('   bev=%s' % result_dict['mAP_R40_bev'])
-    logger.info('   3d=%s' % result_dict['mAP_R40_3d'])
-    logger.info('mAOS=%s' % result_dict['mAOS'])
-    ret_dict.update(result_dict)
+    logger.info("Results: \n"
+          f"Entire annotated area: \n"
+          f"Car: {eval_results['entire_area']['Car_3d_all']} \n"
+          f"Pedestrian: {eval_results['entire_area']['Pedestrian_3d_all']} \n"
+          f"Cyclist: {eval_results['entire_area']['Cyclist_3d_all']} \n"
+          f"mAP: {(eval_results['entire_area']['Car_3d_all'] + eval_results['entire_area']['Pedestrian_3d_all'] + eval_results['entire_area']['Cyclist_3d_all']) / 3} \n"
+          f"Driving corridor area: \n"
+          f"Car: {eval_results['roi']['Car_3d_all']} \n"
+          f"Pedestrian: {eval_results['roi']['Pedestrian_3d_all']} \n"
+          f"Cyclist: {eval_results['roi']['Cyclist_3d_all']} \n"
+          f"mAP: {(eval_results['roi']['Car_3d_all'] + eval_results['roi']['Pedestrian_3d_all'] + eval_results['roi']['Cyclist_3d_all']) / 3} \n"
+          )
+
+    current_epoch_mAP_3d = (eval_results['entire_area']['Car_3d_all'] + eval_results['entire_area']['Pedestrian_3d_all'] + eval_results['entire_area']['Cyclist_3d_all']) / 3
+    eval_results['mAP_3d'] = current_epoch_mAP_3d
+    ret_dict.update(eval_results)
     # save gt, prediction, final points origin, final points new coordinate
 
-    if save_best_eval and result_dict['mAP_3d'] > best_mAP_3d:
+    if save_best_eval and current_epoch_mAP_3d > best_mAP_3d:
         logger.info('>>>>>> Saving best mAP_3d model save to %s <<<<<<' % result_dir)
         ckpt_name = best_model_output_dir / 'best_epoch_checkpoint'
         save_checkpoint(
