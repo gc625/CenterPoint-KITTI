@@ -47,7 +47,7 @@ def parse_config():
     parser.add_argument('--freeze_part', type=bool, default=False, help='load head params only and freeze them during training')
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
     parser.add_argument('--eval_epoch', type=int, default=1, help='number of epoch for eval once')
-    parser.add_argument('--eval_save', type=bool, default=False, help='save best eval model during training')
+    parser.add_argument('--eval_save', type=bool, default=True, help='save best eval model during training')
 
     args = parser.parse_args()
     print(args.freeze_part)

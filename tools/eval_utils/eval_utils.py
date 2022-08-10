@@ -1,4 +1,5 @@
 from distutils.log import debug
+from genericpath import exists
 import pickle
 import time
 
@@ -21,6 +22,66 @@ def statistics_info(cfg, ret_dict, metric, disp_dict):
             metric['recall_roi_%s' % str(min_thresh)], metric['recall_rcnn_%s' % str(min_thresh)], metric['gt_num'])
 
 
+def vis_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
+                   runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
+    result_dir.mkdir(parents=True, exist_ok=True)
+
+    final_output_dir = result_dir / 'final_result' / 'data'
+    
+    if save_to_file:
+        final_output_dir.mkdir(parents=True, exist_ok=True)
+    
+    best_model_output_dir = result_dir / 'best_eval'
+    if save_best_eval:
+        best_model_output_dir.mkdir(parents=True, exist_ok=True)
+
+    metric = {
+        'gt_num': 0,
+    }
+    for cur_thresh in cfg.MODEL.POST_PROCESSING.RECALL_THRESH_LIST:
+        metric['recall_roi_%s' % str(cur_thresh)] = 0
+        metric['recall_rcnn_%s' % str(cur_thresh)] = 0
+
+    dataset = dataloader.dataset
+    
+
+    logger.info('*************** EPOCH %s EVALUATION *****************' % epoch_id)
+    if dist_test:
+        num_gpus = torch.cuda.device_count()
+        local_rank = cfg.LOCAL_RANK % num_gpus
+        model = torch.nn.parallel.DistributedDataParallel(
+            model,
+            device_ids=[local_rank],
+            broadcast_buffers=False
+        )
+    model.eval()
+
+    frame_ids = []
+
+    attach_pw_dir = final_output_dir/'attach_pw'
+    main_pw_dir = final_output_dir/'main_pw'
+    attach_pw_dir.mkdir(exist_ok=True)
+    main_pw_dir.mkdir(exist_ok=True)
+
+    for i, batch_dict in enumerate(tqdm.tqdm(dataloader)):
+        load_data_to_gpu(batch_dict)
+
+        # with torch.no_grad():
+        # calculate the transfer loss, backpropagate to the pooling weights layer
+        # set requires_grad for pooling weights module
+        start_run_time = time.time()
+        pred_dicts, ret_dict = model(batch_dict)
+        duration = time.time() - start_run_time
+        frame_ids += list(batch_dict['frame_id'])
+        attach_pw_dict = pred_dicts[0]['attach_pw_dict']
+        main_pw_dict = pred_dicts[0]['main_pw_dict']
+        save_name = str(frame_ids[-1]) + '.npy'
+        attach_fname = str(attach_pw_dir / save_name)
+        main_fname = str(main_pw_dir / save_name)
+        np.save(attach_fname, attach_pw_dict)
+        np.save(main_fname, main_pw_dict)
+
+            
 def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
                    runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -86,6 +147,12 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             pred_dicts, ret_dict = model(batch_dict)
             duration = time.time() - start_run_time
             frame_ids += list(batch_dict['frame_id'])
+
+            if hasattr(model, 'vis'):
+                vis = True
+            else:
+                vis = False
+
             if hasattr(model, 'debug'):
                 debug = model.debug
             else:
@@ -101,7 +168,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 center_origin_dict[frame_ids[-1]] = centers_origin
                 ip_dict[frame_ids[-1]] = points
                 # pointwise classification
-                if debug:
+                if debug or vis:
                     radar_idx = batch_dict['radar_idx'].cpu().numpy().reshape([-1, 1])
                     lidar_idx = batch_dict['lidar_idx'].cpu().numpy().reshape([-1, 1])
                     mask = batch_dict['mask'].cpu().numpy().reshape([-1, 1])

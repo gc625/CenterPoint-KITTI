@@ -1,5 +1,5 @@
 DATASET: 'KittiDataset'
-DATA_PATH: '/root/data/gabriel/view_of_delft_PUBLIC/lidar'
+DATA_PATH: '/root/dj/code/CenterPoint-KITTI/data/vod_lidar'
 
 POINT_CLOUD_RANGE: [0, -25.6, -3, 51.2, 25.6, 2]
 
