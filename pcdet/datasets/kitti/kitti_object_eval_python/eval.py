@@ -699,9 +699,6 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, is_radar, PR_d
                     j, 0, 1]  # get j class, difficulty, second min_overlap
                 ret_dict['%s_bev_all' % class_to_name[curcls]] = mAPbev[
                     j, 0, 1]  # get j class, difficulty, second min_overlap
-                print('class=%s mAP3d=%s' % (curcls, mAP3d))
-                print('class=%s mAP3d=%s' % (curcls, mAP3d))
-                print('mAP3d[j, 0, 1]=%s' % (mAP3d[j, 0, 1]))
 
     if custom_method == 0:
         return {'entire_area': ret_dict}
