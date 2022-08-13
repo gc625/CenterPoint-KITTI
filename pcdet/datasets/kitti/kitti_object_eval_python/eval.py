@@ -29,7 +29,7 @@ def get_thresholds(scores: np.ndarray, num_gt, num_sample_pts=41):
 
 def clean_data(gt_anno, dt_anno, current_class, difficulty):
     CLASS_NAMES = ['car', 'pedestrian', 'cyclist', 'van', 'person_sitting', 'truck']
-    MIN_HEIGHT = [40, 40, 40]
+    MIN_HEIGHT = [40, 40, 40] # -> all 40
     MAX_OCCLUSION = [2, 2, 2]
     MAX_TRUNCATION = [0.15, 0.3, 0.5]
     dc_bboxes, ignored_gt, ignored_dt = [], [], []
@@ -585,7 +585,7 @@ def do_eval(gt_annos,
             compute_aos=False,
             PR_detail_dict=None):
     # min_overlaps: [num_minoverlap, metric, num_class]
-    difficultys = [0]
+    difficultys = [0] 
     ret = eval_class(gt_annos, dt_annos, current_classes, difficultys, 0,
                      min_overlaps, compute_aos)
     # import ipdb
@@ -641,11 +641,11 @@ def do_coco_style_eval(gt_annos, dt_annos, current_classes, overlap_ranges,
 
 
 def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict=None, is_radar=False):
-    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7,
-                             0.5, 0.7], [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
+    overlap_0_7 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.7], 
+                            [0.7, 0.5, 0.5, 0.7, 0.5, 0.7],
                             [0.7, 0.5, 0.5, 0.7, 0.5, 0.7]])
-    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7,
-                             0.5, 0.5], [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
+    overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.5], 
+                            [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
     min_overlaps = np.stack([overlap_0_7, overlap_0_5], axis=0)  # [2, 3, 5]
     class_to_name = {
@@ -757,8 +757,17 @@ def get_official_eval_result(gt_annos, dt_annos, current_classes, PR_detail_dict
                 ret_dict['%s_image/easy_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 0, 0]
                 # ret_dict['%s_image/moderate_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 1, 0]
                 # ret_dict['%s_image/hard_R40' % class_to_name[curcls]] = mAPbbox_R40[j, 2, 0]
+            
+            if compute_aos and i ==1:
+                ret_dict['%s_aos_all' % class_to_name[curcls]] = mAPaos[j, 0, 1]
 
-    return result, ret_dict
+            if i == 1:
+                ret_dict['%s_3d_all' % class_to_name[curcls]] = mAP3d[
+                    j, 0, 1]  # get j class, difficulty, second min_overlap
+                ret_dict['%s_bev_all' % class_to_name[curcls]] = mAPbev[
+                    j, 0, 1]  # get j class, difficulty, second min_overlap
+
+    return result, {'entire_area': ret_dict}
 
 
 def get_coco_eval_result(gt_annos, dt_annos, current_classes):

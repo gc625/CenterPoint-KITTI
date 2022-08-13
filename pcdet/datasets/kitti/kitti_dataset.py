@@ -387,11 +387,7 @@ class KittiDataset(DatasetTemplate):
             self.logger.info('*************   using pcdet official evaluation script   *************')
             evaluation_result = {}
             result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
-            evaluation_result.update(
-                ap_dict)
-            # evaluation_result.update(
-            #     kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
-            #                                       is_radar=self.is_radar))
+            evaluation_result.update(ap_dict)
             self.logger.info(result_str)
         # import ipdb
         # ipdb.set_trace()
