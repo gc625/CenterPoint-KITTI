@@ -381,24 +381,22 @@ class KittiDataset(DatasetTemplate):
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
 
-        switch_to_vod_eval = self.use_vod_eval
-        if switch_to_vod_eval:
-            self.logger.info('*************   using vod official evaluation script   *************')
-            evaluation_result = {}
-            evaluation_result.update(
-                vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
-            evaluation_result.update(
-                vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
-                                                    is_radar=self.is_radar))
-        else:
-            self.logger.info('*************   using pcdet official evaluation script   *************')
-            evaluation_result = {}
-            result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
-            evaluation_result.update(ap_dict)
-            self.logger.info(result_str)
-        # import ipdb
-        # ipdb.set_trace()
-        return evaluation_result
+        final_evaluation = dict()
+        self.logger.info('*************   using vod official evaluation script   *************')
+        vod_evaluation_result = {}
+        vod_evaluation_result.update(
+            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
+        vod_evaluation_result.update(
+            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
+                                                is_radar=self.is_radar))
+        final_evaluation['vod_eval'] = vod_evaluation_result
+        self.logger.info('*************   using pcdet official evaluation script   *************')
+        kitti_evaluation_result = {}
+        result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
+        kitti_evaluation_result.update(ap_dict)
+        self.logger.info(result_str)
+        final_evaluation['kitti_eval'] = kitti_evaluation_result
+        return final_evaluation
 
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
