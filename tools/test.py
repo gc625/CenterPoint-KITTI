@@ -140,11 +140,7 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
 
         if cfg.LOCAL_RANK == 0:
             for key, val in tb_dict.items():
-                    if isinstance(val, dict):
-                        for sub_key, sub_val in val.items():
-                            tb_log.add_scalar(sub_key, sub_val, cur_epoch_id)
-                    else:
-                        tb_log.add_scalar(key, val, cur_epoch_id)
+                tb_log.add_scalar(key, val, cur_epoch_id)
 
         # record this epoch which has been evaluated
         with open(ckpt_record_file, 'a') as f:
