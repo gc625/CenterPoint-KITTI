@@ -43,6 +43,7 @@ class KittiDataset(DatasetTemplate):
         self.attach_root = self.dataset_cfg.get('ATTACH_ROOT', None) if self.use_attach else None
         self.attach_root = Path(self.attach_root) if self.attach_root is not None else None
         self.resample_pts_num = 100  # default setting
+        self.block_point_cloud_features = self.dataset_cfg.get('BLOCK_POINT_CLOUD_FEATURES', False)
         for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
             if process_cfg.NAME == 'sample_radar_points':
                 self.resample_pts_num = process_cfg.MIN_NUM_PTS
@@ -79,20 +80,28 @@ class KittiDataset(DatasetTemplate):
     def get_lidar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        lidar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        if self.block_point_cloud_features:
+            lidar_point_cloud[:, 3:] = 0
+        return lidar_point_cloud
 
     def get_attach_lidar(self, idx):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
         # print('getting attach lidar data')
         assert lidar_file.exists()
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        lidar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        if self.block_point_cloud_features:
+            lidar_point_cloud[:, 3:] = 0
+        return lidar_point_cloud
 
     def get_radar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
-        # print(lidar_file)
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        if self.block_point_cloud_features:
+            radar_point_cloud[:, 3:] = 0
+        return radar_point_cloud
 
     def get_image_shape(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.jpg' % idx)
