@@ -1,3 +1,4 @@
+from posixpath import abspath
 import numpy as np
 from pathlib import Path as P
 import pickle
@@ -61,9 +62,10 @@ def make_vid(imgs, vid_fname, fps=15):
 
 if __name__ == '__main__':
 
-
+    abs_path = P(__file__).parent.resolve()
+    base_path = abs_path.parents[1]
     path_dict = {
-        'CFAR-radar':'/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
+        'CFAR-radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
         'radar-rcsv':'',
         'radar-rcs':'',
         'radar-v':'',
@@ -81,7 +83,8 @@ if __name__ == '__main__':
     exp_tag = ''
     modality = 'radar' if is_radar else 'lidar'
     tag = 'CFAR-radar'
-    result_path = P(path_dict[tag])
+
+    result_path = base_path / path_dict[tag]
     data_path = P('/root/dj/code/CenterPoint-KITTI/data/vod_%s/training/velodyne'%modality) 
     
 
