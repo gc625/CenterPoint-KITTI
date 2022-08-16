@@ -2,8 +2,11 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /mnt/sda1/hantao/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd_lidar.yaml
+    _BASE_CONFIG_: /root/gabriel/code/parent/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd_lidar.yaml
     # TODO: handle data_processor base on different modality
+    
+    ATTACH_USED_FEATURE_LIST: ['x', 'y', 'z','v_r_compensated']
+    ATTACH_SRC_FEATURE_LIST: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time']
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
@@ -30,8 +33,8 @@ MODEL:
     DEBUG: False
     NAME: IASSDGAN_tidying
     ATTACH_NETWORK:
-        CKPT_FILE: "/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
-        NUM_POINT_FEATURES: 5
+        CKPT_FILE: "/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_vcomp_only/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
+        NUM_POINT_FEATURES: 4
         BACKBONE_3D:
             NAME: IASSD_Backbone
             # ========= for evaluation only ==========

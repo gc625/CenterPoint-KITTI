@@ -125,10 +125,10 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             num_point_features = model_info_dict['num_point_features'] # ====> this was changed by backbone3d
 
-        feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
-
-        # model_info_dict['num_point_features'] =====> change this for detection head
-
+        # feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
+        feature_aug_cfg = self.model_cfg.get('FEAT_AUG', None) if custom_cfg is None else custom_cfg
+        
+        
         feature_aug_module = FeatureAug(feature_aug_cfg, num_point_features)
         model_info_dict['num_point_features'] = feature_aug_module.channel_out
         model_info_dict['module_list'].append(feature_aug_module)
@@ -136,6 +136,7 @@ class IASSD_GAN(Detector3DTemplate):
 
     def build_attach_network(self):
         num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
+        # print(f"ATTACH NUM FEATS {num_feats}")
         model_info_dict = {
             'module_list': [],
             'num_rawpoint_features': num_feats,
@@ -155,6 +156,7 @@ class IASSD_GAN(Detector3DTemplate):
     
     def build_shared_head(self):
         num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
+        # print(f"SHARED HEAD NUM FEATS {num_feats}")
         model_info_dict = {
             'module_list': [],
             'num_rawpoint_features': num_feats,
@@ -284,12 +286,14 @@ class IASSD_GAN(Detector3DTemplate):
         }
         radar_shared_feat = batch_dict['radar_shared']
         share_head_dict = {}
+        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
         for key in attach_dict.keys():
             if key in batch_dict:
                 share_head_dict[key] = batch_dict[key]
         share_head_dict.pop('centers_features')
         share_head_dict['gt_boxes'] = batch_dict['gt_boxes']
         _, c, _ = radar_shared_feat.shape
+        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
         share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
         share_head_dict = self.shared_head(share_head_dict)
         share_head_loss, shared_tb_dict = self.shared_head.get_loss(share_head_dict)
@@ -411,6 +415,8 @@ class FeatureAug(nn.Module):
             self.forward_dict['radar_centers'] = batch_dict['centers']
 
             batch_dict['radar_shared'] = shared_radar
+            # print("shared_radar")
+            # print(shared_radar.shape)
         
                     
         # cat augmented feature to the original feature 'centers_features'
