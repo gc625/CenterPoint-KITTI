@@ -99,8 +99,10 @@ class KittiDataset(DatasetTemplate):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
         used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
-        
         radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        
+        assert lidar_file.exists()
+        
         idx = [0,1,2]
         if 'RCS' in used_feature_list:
             idx += [3]
@@ -110,11 +112,12 @@ class KittiDataset(DatasetTemplate):
             idx += [5]
         if 'time' in used_feature_list:
             idx += [6]
-        
         idx = np.array(idx)
-        print(idx)
-        print(radar_points[:,idx].shape)
-        assert lidar_file.exists()
+        
+        if self.block_point_cloud_features:
+            radar_points[:, 3:] = 0
+
+        
         return radar_points[:,idx]
 
     def get_radar(self, idx):
