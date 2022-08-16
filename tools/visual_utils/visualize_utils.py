@@ -2,6 +2,7 @@ import mayavi.mlab as mlab
 import numpy as np
 import torch
 
+
 box_colormap = [
     [1, 1, 1],
     [0, 1, 0],

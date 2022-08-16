@@ -12,9 +12,12 @@ from vod.visualization.settings import label_color_palette_2d
 
 
 
-def transform_anno(loc, frame_id):
+def transform_anno(loc, frame_id, is_radar=True):
     x,y, z = loc[0], loc[1], loc[2]
-    calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/calib/{0}.txt".format(frame_id)
+    if is_radar:
+        calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/calib/{0}.txt".format(frame_id)
+    else:
+        calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_lidar/training/calib/{0}.txt".format(frame_id)
     calib = calibration_kitti.Calibration(calib_path)
     loc = np.array([[x,y,z]])
     loc_lidar = calib.rect_to_lidar(loc)
@@ -43,7 +46,7 @@ def get_rot_corner(x,y,l,w,a):
 
 
 
-def anno2plt(anno, color_dict, lw, frame_id, xz=False):
+def anno2plt(anno, color_dict, lw, frame_id, xz=False, is_radar=True):
     dim = anno['dimensions']
     loc = anno['location']
     # angle = anno['rotation_y'] * 180 / 3.14
@@ -61,13 +64,13 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False):
     
         if xz:
 
-            x, _, y = transform_anno(loc[idx], frame_id)
+            x, _, y = transform_anno(loc[idx], frame_id, is_radar)
             # w, _, l = dim[idx]
             l, w, _ = dim[idx]  # 
             ang = -angle[idx]* 0
         else:
             # print(loc[idx])
-            x, y, z = transform_anno(loc[idx], frame_id)
+            x, y, z = transform_anno(loc[idx], frame_id, is_radar)
             # print(x,y)
             
             ### X -> LENGTH
@@ -92,14 +95,14 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False):
 
 
 
-def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[]):
+def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[], is_radar=True):
 
 
     # 3. draw bbx
     try:
-        rec_list = anno2plt(annos, color_dict, 2, frame_id=frame_id, xz=False)
+        rec_list = anno2plt(annos, color_dict, 2, frame_id=frame_id, xz=False, is_radar=is_radar)
     except:
-        rec_list = anno2plt(annos[0], color_dict, 2, frame_id=frame_id, xz=False)
+        rec_list = anno2plt(annos[0], color_dict, 2, frame_id=frame_id, xz=False, is_radar=is_radar)
     
     for rec in rec_list:
         ax.add_patch(rec)
