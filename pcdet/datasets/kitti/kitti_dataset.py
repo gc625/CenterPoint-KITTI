@@ -88,12 +88,34 @@ class KittiDataset(DatasetTemplate):
     def get_attach_lidar(self, idx):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
-        # print('getting attach lidar data')
+        # print('ATTACHING LIDAR')
         assert lidar_file.exists()
         lidar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
         if self.block_point_cloud_features:
             lidar_point_cloud[:, 3:] = 0
         return lidar_point_cloud
+
+    def get_attach_radar(self, idx):
+        # create soft link for attach_lidar
+        lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
+        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
+        
+        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        idx = [0,1,2]
+        if 'RCS' in used_feature_list:
+            idx += [3]
+        if 'v_r' in used_feature_list:
+            idx += [4]
+        if 'v_r_compensated' in used_feature_list:
+            idx += [5]
+        if 'time' in used_feature_list:
+            idx += [6]
+        
+        idx = np.array(idx)
+        print(idx)
+        print(radar_points[:,idx].shape)
+        assert lidar_file.exists()
+        return radar_points[:,idx]
 
     def get_radar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
@@ -418,12 +440,16 @@ class KittiDataset(DatasetTemplate):
         points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)
 
+        
         if self.use_attach & self.training:
-            # print('loading attach lidar')
-            # also get calib for lidar
-            attach_calib = self.get_attach_calib(sample_idx)
-            attach = self.get_attach_lidar(sample_idx)
+            if self.is_radar:
+                attach_calib = self.get_attach_calib(sample_idx)
+                attach = self.get_attach_lidar(sample_idx)
             # if self.dataset_cfg.FOV_POINTS_ONLY:
+            else:
+                attach_calib = self.get_attach_calib(sample_idx)
+                attach = self.get_attach_radar(sample_idx)
+
         elif self.debug:
             attach_calib = self.get_attach_calib(sample_idx)
             attach = self.get_attach_lidar(sample_idx)
