@@ -6,7 +6,7 @@ DATA_CONFIG:
     # TODO: handle data_processor base on different modality
     
     ATTACH_USED_FEATURE_LIST: ['x', 'y', 'z','v_r_compensated']
-    ATTACH_SRC_FEATURE_LIST: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time']
+    
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
             REMOVE_OUTSIDE_BOXES: True
