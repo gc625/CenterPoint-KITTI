@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
 
     path_dict = {
-        'CFAR-radar':'/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/eval_with_train',
+        'CFAR-radar':'/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
         'radar-rcsv':'',
         'radar-rcs':'',
         'radar-v':'',
@@ -76,11 +76,12 @@ if __name__ == '__main__':
         'CFAR-lidar':''
     }
 
-    draw_gt = True
+    draw_gt = False
     is_radar = True
     exp_tag = ''
     modality = 'radar' if is_radar else 'lidar'
-    result_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
+    tag = 'CFAR-radar'
+    result_path = P(path_dict[tag])
     data_path = P('/root/dj/code/CenterPoint-KITTI/data/vod_%s/training/velodyne'%modality) 
     
 
@@ -95,7 +96,6 @@ if __name__ == '__main__':
     # load det
     with open(str(result_path / 'dt.pkl'), 'rb') as f:
         dt = pickle.load(f)
-
 
     keys = list(gt.keys())
     cls_name = ['Car','Pedestrian', 'Cyclist', 'Others']
