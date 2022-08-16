@@ -349,7 +349,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
 
 
     current_epoch_mAP_3d = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
-    eval_results['mAP_3d'] = current_epoch_mAP_3d
+    ret_dict['mAP_3d'] = current_epoch_mAP_3d
     ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
     ret_dict['mAP_3d_vod'] = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
     # save gt, prediction, final points origin, final points new coordinate
