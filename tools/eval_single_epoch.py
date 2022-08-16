@@ -203,7 +203,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=16,
+        batch_size=1,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 
@@ -213,7 +213,7 @@ def main():
     eval_single_ckpt(model, test_loader, args, \
     eval_output_dir, logger=logger, epoch_id=args.epochs, \
     reload=False, save_to_file=args.save_to_file,\
-        result_dir=args.result_dir, save_centers=True)
+        result_dir=args.result_dir, save_centers=False)
     # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     # repeat_eval_ckpt(

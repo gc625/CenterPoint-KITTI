@@ -27,7 +27,9 @@ class IASSD_GAN(Detector3DTemplate):
         self.class_names = model_cfg.get('CLASS_NAMES', None)
         self.vis_cnt = 0 
         self.vis_interval = 100 # in unit batch
+        
         self.debug = self.model_cfg.get('DEBUG', False)
+        # ipdb.set_trace()
         self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
         self.attach_model_cfg.BACKBONE_3D['num_class'] = num_class
         if model_cfg.get('DISABLE_ATTACH'):
@@ -128,6 +130,7 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             
             pred_dicts, recall_dicts = self.post_processing(batch_dict)
+            # ipdb.set_trace()
             if self.debug:
                 loss, tb_dict, disp_dict = self.get_training_loss()
                 transfer_loss = self.get_transfer_loss(batch_dict)
@@ -153,21 +156,22 @@ class IASSD_GAN(Detector3DTemplate):
 
                         
 
-                # 2. get main(radar) pooling weights
-                main_grad_dict = {}
-                bb = self.backbone_3d
-                for m_name, m in bb.named_modules():
-                    if 'pool_weights' in m_name:
-                        try:
-                            pw_grad = m.weights.grad.detach().cpu().numpy()
-                            main_grad_dict[m_name] = pw_grad
-                        except:
-                            pass
-                # save grad of pooling weights for all layer 
-                pass
-            # recall_dicts['batch_dict'] = batch_dict
-            pred_dicts[0]['attach_pw_dict'] = attach_grad_dict
-            pred_dicts[0]['main_pw_dict'] = main_grad_dict
+                    # 2. get main(radar) pooling weights
+                    main_grad_dict = {}
+                    bb = self.backbone_3d
+                    for m_name, m in bb.named_modules():
+                        if 'pool_weights' in m_name:
+                            try:
+                                pw_grad = m.weights.grad.detach().cpu().numpy()
+                                main_grad_dict[m_name] = pw_grad
+                            except:
+                                pass
+                    # save grad of pooling weights for all layer 
+                    pass
+                # recall_dicts['batch_dict'] = batch_dict
+                
+                    pred_dicts[0]['attach_pw_dict'] = attach_grad_dict
+                    pred_dicts[0]['main_pw_dict'] = main_grad_dict
             return pred_dicts, recall_dicts
 
     def build_feature_aug(self, model_info_dict, custom_cfg=None):
@@ -863,6 +867,7 @@ class FeatureAug(nn.Module):
         # self.input_channel = input_channels # exact number of the center feature vector
         # self.output_channel = 
         self.debug = model_cfg.get('DEBUG', False)
+        # ipdb.set_trace()
         self.relu = self.model_cfg.get('RELU', True)
         self.bn = self.model_cfg.get('BN', True)
         self.mlps = self.model_cfg.get('MLPS', [448, 384, 320, 256])

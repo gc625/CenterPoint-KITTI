@@ -122,6 +122,7 @@ class KittiDataset(DatasetTemplate):
 
     def get_radar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
+        # print(lidar_file)
         assert lidar_file.exists()
         radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
         if self.block_point_cloud_features:
