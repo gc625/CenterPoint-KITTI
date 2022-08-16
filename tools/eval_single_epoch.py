@@ -203,7 +203,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=16,
+        batch_size=1,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 
