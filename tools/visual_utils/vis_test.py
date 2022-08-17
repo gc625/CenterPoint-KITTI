@@ -86,7 +86,8 @@ if __name__ == '__main__':
 
     print(f'VISUALIZING TAG: {tag}')
     result_path = base_path / path_dict[tag]
-    data_path = P('/root/gabriel/code/parent/CenterPoint-KITTI/data/vod/%s/training/velodyne'%modality) 
+    data_path = base_path/ '/CenterPoint-KITTI/data/vod_%s/training/velodyne'%modality 
+
     
 
     dt_img_path = result_path/'dt_img'
