@@ -22,7 +22,7 @@ def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, 
         vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
         vis_pcd = pcd_formating(vis_pcd)
         ax = plt.gca()
-        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title)
+        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar)
         plt.xlim(-0,75)
         plt.ylim(-30,30)
         img_fname = img_path / (fid + '.png')
@@ -32,7 +32,7 @@ def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, 
 def mask_points_by_range(points, limit_range):
     mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
             & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4]) \
-            & (points[:, 2] <= limit_range[2]) & (points[:, 2] <= limit_range[5])
+            & (points[:, 2] >= limit_range[2]) & (points[:, 2] <= limit_range[5])
     return mask
 
 def get_radar(fname):
@@ -88,20 +88,18 @@ if __name__ == '__main__':
         'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
     }
 
-    draw_gt = False
+    draw_gt = True
     
-    lidar_range = [0, -25.6, 1, 51.2, 25.6, 2]
+    lidar_range = [0, -25.6, -2, 51.2, 25.6, 2]
 
     for tag in path_dict.keys():
-        tag = 'lidar_i'
-
         is_radar = False if 'lidar' in tag.lower() else True
         modality = 'radar' if is_radar else 'lidar'
         print(f'VISUALIZING TAG: {tag}')
         result_path = base_path / path_dict[tag]
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_base_path = base_path / 'vod_vis'
+        save_base_path = base_path /'output' / 'vod_vis'
         save_base_path.mkdir(exist_ok=True)
         save_path = save_base_path / tag
         save_path.mkdir(exist_ok=True)
@@ -125,19 +123,17 @@ if __name__ == '__main__':
         for i, v in enumerate(cls_name):
             color_dict[v] = label_color_palette_2d[v]
 
-        saveODImgs(data_ids, dt, data_path, dt_img_path, \
-        color_dict, is_radar=is_radar, title=tag)
-
-        dt_imgs = sorted(glob(str(dt_img_path/'*.png')))
-
-        make_vid(dt_imgs, save_path/'dt.mp4', fps=10)
-
         if draw_gt:
             gt_img_path = save_path/'gt_img'
             gt_img_path.mkdir(exist_ok=True)
             saveODImgs(data_ids, gt, data_path, gt_img_path, \
-                color_dict, is_radar=True, title='gt')
+                color_dict, is_radar=is_radar, title='gt', limit_range=lidar_range)
             gt_imgs = sorted(glob(str(gt_img_path/'*.png')))
             make_vid(gt_imgs, save_path/'gt.mp4', fps=10)
 
-        break
+        saveODImgs(data_ids, dt, data_path, dt_img_path, \
+        color_dict, is_radar=is_radar, title=tag, limit_range=lidar_range)
+
+        dt_imgs = sorted(glob(str(dt_img_path/'*.png')))
+
+        make_vid(dt_imgs, save_path/'dt.mp4', fps=10)
