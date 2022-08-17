@@ -458,7 +458,7 @@ class IASSD_GAN(Detector3DTemplate):
     def build_shared_head(self):
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
+            'num_rawpoint_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
             'num_point_features': self.model_cfg.SHARED_HEAD.NUM_POINT_FEATURES,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
