@@ -14,12 +14,12 @@ from tqdm import tqdm
 from glob import glob
 import argparse
 
-def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred'):
+def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None):
     print('=================== drawing images ===================')
     plt.rcParams['figure.dpi'] = 150
     for fid in tqdm(frame_ids):
         pcd_fname = data_path / (fid + '.bin')
-        vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname)
+        vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
         vis_pcd = pcd_formating(vis_pcd)
         ax = plt.gca()
         drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title)
@@ -29,15 +29,25 @@ def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, 
         plt.savefig(str(img_fname))
         plt.cla()
 
+def mask_points_by_range(points, limit_range):
+    mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
+            & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4]) \
+            & (points[:, 2] <= limit_range[2]) & (points[:, 2] <= limit_range[5])
+    return mask
+
 def get_radar(fname):
     assert fname.exists()
     radar_point_cloud = np.fromfile(str(fname), dtype=np.float32).reshape(-1, 7)
     return radar_point_cloud
 
-def get_lidar(fname):
+def get_lidar(fname, limit_range):
     assert fname.exists()
-    radar_point_cloud = np.fromfile(str(fname), dtype=np.float32).reshape(-1, 4)
-    return radar_point_cloud
+    lidar_point_cloud = np.fromfile(str(fname), dtype=np.float32).reshape(-1, 4)
+    if limit_range is not None:
+        mask = mask_points_by_range(lidar_point_cloud, limit_range)
+        return lidar_point_cloud[mask]
+    else:
+        return lidar_point_cloud
 
 def pcd_formating(pcd):
     num_pts = pcd.shape[0]
@@ -65,62 +75,69 @@ if __name__ == '__main__':
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
     path_dict = {
-        'CFAR-radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
-        'radar-rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
-        'radar-rcs':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
-        'radar-v':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
-        'radar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
-        'lidar-i':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
-        'lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
-        'CFAR-lidar-rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
-        'CFAR-lidar-rcs':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
-        'CFAR-lidar-v':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
-        'CFAR-lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
+        'CFAR_radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
+        'radar_rcsv':'output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
+        'radar_rcs':'output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
+        'radar_v':'output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
+        'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'lidar_i':'output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
+        'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcsv':'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcs':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar_v':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
     }
 
     draw_gt = False
-    is_radar = True
-    exp_tag = ''
-    modality = 'radar' if is_radar else 'lidar'
-    tag = 'radar'
-
-    print(f'VISUALIZING TAG: {tag}')
-    result_path = base_path / path_dict[tag]
-    data_path = base_path/ '/CenterPoint-KITTI/data/vod_%s/training/velodyne'%modality 
-
     
+    lidar_range = [0, -25.6, 1, 51.2, 25.6, 2]
 
-    dt_img_path = result_path/'dt_img'
-    dt_img_path.mkdir(exist_ok=True)
-    # os.makedirs(dt_img_path)
+    for tag in path_dict.keys():
+        tag = 'lidar_i'
 
-    data_ids = np.loadtxt(str(result_path / 'frame_ids.txt'), delimiter=',', dtype=str)[:-1]
+        is_radar = False if 'lidar' in tag.lower() else True
+        modality = 'radar' if is_radar else 'lidar'
+        print(f'VISUALIZING TAG: {tag}')
+        result_path = base_path / path_dict[tag]
+        data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-    with open(str(result_path / 'gt.pkl'), 'rb') as f:
-        gt = pickle.load(f)
+        save_base_path = base_path / 'vod_vis'
+        save_base_path.mkdir(exist_ok=True)
+        save_path = save_base_path / tag
+        save_path.mkdir(exist_ok=True)
 
-    # load det
-    with open(str(result_path / 'dt.pkl'), 'rb') as f:
-        dt = pickle.load(f)
+        dt_img_path = save_path/'dt_img'
+        dt_img_path.mkdir(exist_ok=True)
+        # os.makedirs(dt_img_path)
 
-    keys = list(gt.keys())
-    cls_name = ['Car','Pedestrian', 'Cyclist', 'Others']
-    color_dict = {}
-    for i, v in enumerate(cls_name):
-        color_dict[v] = label_color_palette_2d[v]
+        data_ids = np.loadtxt(str(result_path / 'frame_ids.txt'), delimiter=',', dtype=str)[:-1]
 
-    saveODImgs(data_ids, dt, data_path, dt_img_path, \
-    color_dict, is_radar=is_radar, title='pred CFAR')
+        with open(str(result_path / 'gt.pkl'), 'rb') as f:
+            gt = pickle.load(f)
 
-    dt_imgs = sorted(glob(str(dt_img_path/'*.png')))
+        # load det
+        with open(str(result_path / 'dt.pkl'), 'rb') as f:
+            dt = pickle.load(f)
 
-    make_vid(dt_imgs, result_path/'dt.mp4', fps=10)
+        keys = list(gt.keys())
+        cls_name = ['Car','Pedestrian', 'Cyclist', 'Others']
+        color_dict = {}
+        for i, v in enumerate(cls_name):
+            color_dict[v] = label_color_palette_2d[v]
 
+        saveODImgs(data_ids, dt, data_path, dt_img_path, \
+        color_dict, is_radar=is_radar, title=tag)
 
-    if draw_gt:
-        gt_img_path = result_path/'gt_img'
-        gt_img_path.mkdir(exist_ok=True)
-        saveODImgs(data_ids, gt, data_path, gt_img_path, \
-            color_dict, is_radar=True, title='gt')
-        gt_imgs = sorted(glob(str(gt_img_path/'*.png')))
-        make_vid(gt_imgs, result_path/'gt.mp4', fps=10)
+        dt_imgs = sorted(glob(str(dt_img_path/'*.png')))
+
+        make_vid(dt_imgs, save_path/'dt.mp4', fps=10)
+
+        if draw_gt:
+            gt_img_path = save_path/'gt_img'
+            gt_img_path.mkdir(exist_ok=True)
+            saveODImgs(data_ids, gt, data_path, gt_img_path, \
+                color_dict, is_radar=True, title='gt')
+            gt_imgs = sorted(glob(str(gt_img_path/'*.png')))
+            make_vid(gt_imgs, save_path/'gt.mp4', fps=10)
+
+        break

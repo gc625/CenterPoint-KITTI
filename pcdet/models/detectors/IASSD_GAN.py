@@ -480,8 +480,8 @@ class IASSD_GAN(Detector3DTemplate):
     def build_attach_network(self):
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
-            'num_point_features': 4,
+            'num_rawpoint_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
+            'num_point_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
             'voxel_size': self.dataset.voxel_size,
@@ -499,7 +499,7 @@ class IASSD_GAN(Detector3DTemplate):
         if not os.path.isfile(filename):
             raise FileNotFoundError
 
-        logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
+        logger.info('==> Loading attach parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
         loc_type = torch.device('cpu') if to_cpu else None
         checkpoint = torch.load(filename, map_location=loc_type)
         model_state_disk = checkpoint['model_state']

@@ -104,8 +104,6 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends
     except:
         rec_list = anno2plt(annos[0], color_dict, 2, frame_id=frame_id, xz=False, is_radar=is_radar)
     
-    for rec in rec_list:
-        ax.add_patch(rec)
     # 1. draw original points if exist
     if pts is not None:
         x = pts[:, 1]
@@ -116,6 +114,9 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends
         cx = centers[:, 1]
         cy = centers[:, 2]
         ax.scatter(cx, cy, c='red', s=0.1)
+    
+    for rec in rec_list:
+        ax.add_patch(rec)
 
     legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
     if centers is not None:
