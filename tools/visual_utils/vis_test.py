@@ -6,7 +6,7 @@ import pickle
 import cv2
 from vod.visualization.settings import label_color_palette_2d
 from matplotlib.lines import Line2D
-
+import os 
 from visualize_point_based import drawBEV
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -66,30 +66,33 @@ if __name__ == '__main__':
     base_path = abs_path.parents[1]
     path_dict = {
         'CFAR-radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
-        'radar-rcsv':'',
-        'radar-rcs':'',
-        'radar-v':'',
-        'radar':'',
-        'lidar-i':'',
-        'lidar':'',
-        'CFAR-lidar-rcsv':'',
-        'CFAR-lidar-rcs':'',
-        'CFAR-lidar-v':'',
-        'CFAR-lidar':''
+        'radar-rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
+        'radar-rcs':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
+        'radar-v':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
+        'radar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'lidar-i':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
+        'lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'CFAR-lidar-rcsv':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
+        'CFAR-lidar-rcs':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
+        'CFAR-lidar-v':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
+        'CFAR-lidar':'/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
     }
 
     draw_gt = False
     is_radar = True
     exp_tag = ''
     modality = 'radar' if is_radar else 'lidar'
-    tag = 'CFAR-radar'
+    tag = 'radar'
 
+    print(f'VISUALIZING TAG: {tag}')
     result_path = base_path / path_dict[tag]
     data_path = base_path/ '/CenterPoint-KITTI/data/vod_%s/training/velodyne'%modality 
+
     
 
     dt_img_path = result_path/'dt_img'
     dt_img_path.mkdir(exist_ok=True)
+    # os.makedirs(dt_img_path)
 
     data_ids = np.loadtxt(str(result_path / 'frame_ids.txt'), delimiter=',', dtype=str)[:-1]
 
@@ -107,7 +110,7 @@ if __name__ == '__main__':
         color_dict[v] = label_color_palette_2d[v]
 
     saveODImgs(data_ids, dt, data_path, dt_img_path, \
-    color_dict, is_radar=True, title='pred CFAR')
+    color_dict, is_radar=is_radar, title='pred CFAR')
 
     dt_imgs = sorted(glob(str(dt_img_path/'*.png')))
 

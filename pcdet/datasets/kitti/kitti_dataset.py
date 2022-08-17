@@ -381,8 +381,8 @@ class KittiDataset(DatasetTemplate):
             # print(output_path)
             # print('=================================')
             if output_path is not None:
-                import ipdb
-                ipdb.set_trace()
+                # import ipdb
+                # ipdb.set_trace()
                 cur_det_file = output_path / ('%s.txt' % frame_id)
                 with open(cur_det_file, 'w') as f:
                     bbox = single_pred_dict['bbox']
