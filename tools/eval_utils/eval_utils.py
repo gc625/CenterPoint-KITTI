@@ -6,7 +6,7 @@ import time
 import numpy as np
 import torch
 import tqdm
-
+import ipdb
 from pcdet.models import load_data_to_gpu
 from pcdet.utils import common_utils
 
@@ -85,7 +85,7 @@ def vis_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sav
 def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
                    runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
     result_dir.mkdir(parents=True, exist_ok=True)
-
+    ipdb.set_trace()
     final_output_dir = result_dir / 'final_result' / 'data'
     # import ipdb
     # ipdb.set_trace()
@@ -152,7 +152,6 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 vis = model.vis
             else:
                 vis = False
-
             if hasattr(model, 'debug'):
                 debug = model.debug
             else:
@@ -170,6 +169,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 ip_dict[frame_ids[-1]] = points
                 # pointwise classification
                 if debug or vis:
+                    ipdb.set_trace()
                     radar_idx = batch_dict['radar_idx'].cpu().numpy().reshape([-1, 1])
                     lidar_idx = batch_dict['lidar_idx'].cpu().numpy().reshape([-1, 1])
                     mask = batch_dict['mask'].cpu().numpy().reshape([-1, 1])
@@ -261,7 +261,8 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     gt_annos = []
     for id in frame_ids:
         gt_annos += [gt_dict[id]]
-
+    
+    # ipdb.set_trace()
     if save_to_file:
         with open(result_dir / 'gt.pkl', 'wb') as f:
             pickle.dump(gt_dict, f)
@@ -269,7 +270,7 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         # save detection
         with open(result_dir / 'dt.pkl', 'wb') as f:
             pickle.dump(det_dict, f)
-
+    # ipdb.set_trace()
     if save_center:
 
         save_name_list = (

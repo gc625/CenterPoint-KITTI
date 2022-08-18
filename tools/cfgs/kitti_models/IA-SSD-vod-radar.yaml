@@ -2,7 +2,7 @@ CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 # CLASS_NAMES: ['Car']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
+    _BASE_CONFIG_: /root/gabriel/code/parent/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
 
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
@@ -19,13 +19,17 @@ DATA_CONFIG:
                 'train': True,
                 'test': False
             }
-    DATA_AUGMENTOR:
-        DISABLE_AUG_LIST: ['placeholder']
-        # - NAME: random_world_flip
-        #   ALONG_AXIS_LIST: ['x']
-
-    #     - NAME: random_world_scaling
-    #       WORLD_SCALE_RANGE: [0.95, 1.05]
+    # DATA_AUGMENTOR:
+    #     DISABLE_AUG_LIST: ['placeholder']
+    #     # - NAME: random_world_flip
+    #     #   ALONG_AXIS_LIST: ['x']
+    #     POINT_FEATURE_ENCODING: {
+    #     encoding_type: absolute_coordinates_encoding,
+    #     used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
+    #     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'], 
+    #     }
+        #     - NAME: random_world_scaling
+        #       WORLD_SCALE_RANGE: [0.95, 1.05]
 
 MODEL:
     NAME: IASSD

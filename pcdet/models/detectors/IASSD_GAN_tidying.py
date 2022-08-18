@@ -125,7 +125,7 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             num_point_features = model_info_dict['num_point_features'] # ====> this was changed by backbone3d
 
-        feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
+        feature_aug_cfg = self.model_cfg.get('FEAT_AUG', None) if custom_cfg is None else custom_cfg
 
         # model_info_dict['num_point_features'] =====> change this for detection head
 
@@ -135,10 +135,12 @@ class IASSD_GAN(Detector3DTemplate):
         return feature_aug_module, model_info_dict
 
     def build_attach_network(self):
+        num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
+        # print(f"ATTACH NUM FEATS {num_feats}")
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
-            'num_point_features': 4,
+            'num_rawpoint_features': num_feats,
+            'num_point_features': num_feats,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
             'voxel_size': self.dataset.voxel_size,
@@ -153,9 +155,11 @@ class IASSD_GAN(Detector3DTemplate):
         return model_info_dict['module_list']
     
     def build_shared_head(self):
+        num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
+        # print(f"SHARED HEAD NUM FEATS {num_feats}")
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
+            'num_rawpoint_features': num_feats,
             'num_point_features': self.model_cfg.SHARED_HEAD.NUM_POINT_FEATURES,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
@@ -204,7 +208,8 @@ class IASSD_GAN(Detector3DTemplate):
     def get_transfer_feature(self, batch_dict):
         attach_dict = {
             'points': torch.clone(batch_dict['attach']),
-            'batch_size': batch_dict['batch_size']
+            'batch_size': batch_dict['batch_size'],
+            'frame_id': batch_dict['frame_id']
         }
 
         attach_dict = self.attach_model(attach_dict)
@@ -281,12 +286,14 @@ class IASSD_GAN(Detector3DTemplate):
         }
         radar_shared_feat = batch_dict['radar_shared']
         share_head_dict = {}
+        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
         for key in attach_dict.keys():
             if key in batch_dict:
                 share_head_dict[key] = batch_dict[key]
         share_head_dict.pop('centers_features')
         share_head_dict['gt_boxes'] = batch_dict['gt_boxes']
         _, c, _ = radar_shared_feat.shape
+        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
         share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
         share_head_dict = self.shared_head(share_head_dict)
         share_head_loss, shared_tb_dict = self.shared_head.get_loss(share_head_dict)
@@ -303,7 +310,7 @@ class IASSD_GAN(Detector3DTemplate):
 
         # get loss from shared_det_head
         tb_dict.update(new_tb_dict)
-        loss = loss_point + loss_match
+        loss = (2/3)*loss_point + (1/3)*loss_match
 
         return loss, tb_dict, disp_dict
 
@@ -408,6 +415,8 @@ class FeatureAug(nn.Module):
             self.forward_dict['radar_centers'] = batch_dict['centers']
 
             batch_dict['radar_shared'] = shared_radar
+            # print("shared_radar")
+            # print(shared_radar.shape)
         
                     
         # cat augmented feature to the original feature 'centers_features'
