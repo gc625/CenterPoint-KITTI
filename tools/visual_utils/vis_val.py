@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
     draw_gt = True
     
-    lidar_range = [0, -25.6, -2, 51.2, 25.6, 2]
+    lidar_range = [0, -25.6, -3, 51.2, 25.6, 1]
 
     for tag in path_dict.keys():
         is_radar = False if 'lidar' in tag.lower() else True

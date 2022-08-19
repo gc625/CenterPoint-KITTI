@@ -85,7 +85,7 @@ def vis_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sav
 def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, save_to_file=False, result_dir=None,
                    runtime_gt=False, save_best_eval=False, best_mAP_3d=0.0, save_centers=False):
     result_dir.mkdir(parents=True, exist_ok=True)
-    ipdb.set_trace()
+    # ipdb.set_trace()
     final_output_dir = result_dir / 'final_result' / 'data'
     # import ipdb
     # ipdb.set_trace()
@@ -252,12 +252,31 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     import copy
 
     gt_dict = {}
-    for info in dataset.kitti_infos:
-        frame_id = copy.deepcopy(info['image']['image_idx'])
-        gt_anno = copy.deepcopy(info['annos'])
-        gt_dict[frame_id] = gt_anno
-        pass
-    # gt_annos = [copy.deepcopy(info['annos']) for info in dataset.kitti_infos]
+    try:
+        for info in dataset.kitti_infos:
+            frame_id = copy.deepcopy(info['image']['image_idx'])
+            gt_anno = copy.deepcopy(info['annos'])
+            gt_dict[frame_id] = gt_anno
+            pass
+    except:
+        logger.info('no available gt annos, running as testing')
+
+        if save_to_file:
+            with open(result_dir / 'gt.pkl', 'wb') as f:
+                pickle.dump(gt_dict, f)
+
+            # save detection
+            with open(result_dir / 'dt.pkl', 'wb') as f:
+                pickle.dump(det_dict, f)
+
+            # save frame ids
+            with open(result_dir / 'frame_ids.txt', 'w') as f:
+                for id in frame_ids:
+                    f.write(str(id) + ',')
+
+        import sys
+        sys.exit()
+
     gt_annos = []
     for id in frame_ids:
         gt_annos += [gt_dict[id]]
@@ -270,6 +289,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         # save detection
         with open(result_dir / 'dt.pkl', 'wb') as f:
             pickle.dump(det_dict, f)
+
+        # save frame ids
+        with open(result_dir / 'frame_ids.txt', 'w') as f:
+            for id in frame_ids:
+                f.write(str(id) + ',')
     # ipdb.set_trace()
     if save_center:
 
@@ -304,12 +328,6 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
             with open(save_name, 'wb') as f:
                 pickle.dump(save_data, f)
 
-    if save_to_file:
-
-        # save frame ids
-        with open(result_dir / 'frame_ids.txt', 'w') as f:
-            for id in frame_ids:
-                f.write(str(id) + ',')
 
     try:
         eval_results = dataset.evaluation(

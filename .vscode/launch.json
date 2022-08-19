@@ -16,9 +16,9 @@
                 // "--epoch", "20", 
                 "--workers", "8", 
                 "--extra_tag", "debug",
-                "--batch_size", "16",
-                // "--save_to_file", "False",
-                "--pretrained_model", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/ckpt/checkpoint_epoch_11.pth"
+                "--batch_size", "1",
+                "--save_to_file",
+                "--ckpt", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/ckpt/checkpoint_epoch_11.pth"
             ]
         }
     ]

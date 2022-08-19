@@ -8,8 +8,9 @@ from ..utils import common_utils
 from .augmentor.data_augmentor import DataAugmentor
 from .processor.data_processor import DataProcessor
 from .processor.point_feature_encoder import PointFeatureEncoder
-
-
+from pathlib import Path as P
+abs_path = P(__file__).parent.resolve()
+base_path = abs_path.parents[1]
 class DatasetTemplate(torch_data.Dataset):
     def __init__(self, dataset_cfg=None, class_names=None, training=True, root_path=None, logger=None):
         super().__init__()
@@ -17,7 +18,7 @@ class DatasetTemplate(torch_data.Dataset):
         self.training = training
         self.class_names = class_names
         self.logger = logger
-        self.root_path = root_path if root_path is not None else Path(self.dataset_cfg.DATA_PATH)
+        self.root_path = root_path if root_path is not None else base_path / self.dataset_cfg.DATA_PATH
         self.logger = logger
         if self.dataset_cfg is None or class_names is None:
             return

@@ -9,11 +9,11 @@ ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
 
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-
+RUN apt clean
 # Install basics
 RUN apt-get update -y \
     && apt-get install build-essential \
-    && apt-get install -y apt-utils git curl ca-certificates bzip2 tree htop wget \
+    && apt-get install -y apt-utils git curl ca-certificates bzip2 tree htop wget xclock \
     && apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev bmon iotop g++ python3.7 python3.7-dev python3.7-distutils openssh-server libgl1-mesa-glx
 
 RUN pip install --user tensorboard cmake   # cmake from apt-get is too old
@@ -45,5 +45,7 @@ RUN echo "export PATH=${PATH}" >> /root/.bashrc
 # set cuda env in bashrc
 COPY ./cuda_env.txt /
 RUN cat /cuda_env.txt >> /root/.bashrc
+COPY ./ssh_config /etc/ssh/
+
 # EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]

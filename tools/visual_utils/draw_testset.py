@@ -23,12 +23,13 @@ if __name__ == '__main__':
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
 
-    tag = 'CFAR_lidar_rcsv'
+    tag = 'CFAR_radar'
 
     vis_root_path = base_path / path_dict[tag]
     test_result_path = vis_root_path / 'final_result' / 'data'
     test_result_files = sorted(glob(str(test_result_path / '*.txt')))
-    is_radar = False
+    is_radar = False if 'lidar' in tag.lower() else True
+    # is_radar = False
     is_test = True
     modality = 'radar' if is_radar else 'lidar'
     split = 'testing' if is_test else 'training'

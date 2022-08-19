@@ -5,7 +5,7 @@ from easydict import EasyDict
 
 from pathlib import Path as P
 abs_path = P(__file__).parent.resolve()
-base_path = abs_path.parents[1]
+base_path = abs_path.parents[0]
 def log_config_to_file(cfg, pre='cfg', logger=None):
     for key, val in cfg.items():
         if isinstance(cfg[key], EasyDict):
@@ -51,15 +51,23 @@ def cfg_from_list(cfg_list, config):
 
 
 def merge_new_config(config, new_config):
-    import ipdb
-    ipdb.set_trace()
     if '_BASE_CONFIG_' in new_config:
-        with open(new_config['_BASE_CONFIG_'], 'r') as f:
-            try:
-                yaml_config = yaml.load(f, Loader=yaml.FullLoader)
-            except:
-                yaml_config = yaml.load(f)
-        config.update(EasyDict(yaml_config))
+        try:
+            cfg_path = base_path / new_config['_BASE_CONFIG_']
+            with open(str(cfg_path), 'r') as f:
+                try:
+                    yaml_config = yaml.load(f, Loader=yaml.FullLoader)
+                except:
+                    yaml_config = yaml.load(f)
+            config.update(EasyDict(yaml_config))
+        except:
+            # abs path
+            with open(new_config['_BASE_CONFIG_'], 'r') as f:
+                try:
+                    yaml_config = yaml.load(f, Loader=yaml.FullLoader)
+                except:
+                    yaml_config = yaml.load(f)
+            config.update(EasyDict(yaml_config))
 
     for key, val in new_config.items():
         if not isinstance(val, dict):
