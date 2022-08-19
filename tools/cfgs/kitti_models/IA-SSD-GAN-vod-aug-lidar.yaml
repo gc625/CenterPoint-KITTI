@@ -2,7 +2,7 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /root/gabriel/code/parent/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd_lidar.yaml
+    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_radar_dataset_iassd_lidar.yaml
     # TODO: handle data_processor base on different modality
     
     ATTACH_USED_FEATURE_LIST: ['x', 'y', 'z','v_r_compensated']
@@ -38,7 +38,7 @@ MODEL:
         BACKBONE_3D:
             NAME: IASSD_Backbone
             # ========= for evaluation only ==========
-            # SAVE_FEAT_DIR: '/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/attach'
+            # SAVE_FEAT_DIR: '/mnt/sda1/hantao/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/attach'
             # ========================================
             SA_CONFIG:
                 NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
@@ -73,7 +73,7 @@ MODEL:
     BACKBONE_3D:
         NAME: IASSD_Backbone
         # ========= for evaluation only ==========
-        # SAVE_FEAT_DIR: '/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/main_branch'
+        # SAVE_FEAT_DIR: '/mnt/sda1/hantao/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/inter_feats/main_branch'
         # ========================================
         SA_CONFIG:
             Sampling setting:
