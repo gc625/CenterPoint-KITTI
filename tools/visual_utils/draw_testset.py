@@ -22,7 +22,10 @@ if __name__ == '__main__':
     lidar_range = [0, -25.6, -1.5, 51.2, 25.6, 1]
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
-    vis_root_path = base_path / 'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint'
+
+    tag = 'CFAR_lidar_rcsv'
+
+    vis_root_path = base_path / path_dict[tag]
     test_result_path = vis_root_path / 'final_result' / 'data'
     test_result_files = sorted(glob(str(test_result_path / '*.txt')))
     is_radar = False
@@ -54,12 +57,12 @@ if __name__ == '__main__':
     for i, v in enumerate(cls_name):
         color_dict[v] = label_color_palette_2d[v]
 
-    vis_img_path = base_path / 'output' / 'vod_testset' / 'debug'
+    vis_img_path = base_path / 'output' / 'vod_testset' / tag
     vis_img_path.mkdir(exist_ok=True, parents=True)
     vis_tools.saveODImgs(frame_ids, annas_dict, pcd_file_path, vis_img_path, color_dict,\
         is_radar, title='test', limit_range=lidar_range, is_test=True)
 
     dt_imgs = sorted(glob(str(vis_img_path/'*.png')))
-    vid_path = base_path/'test_vid'
+    vid_path = base_path/'output'
     vid_path.mkdir(exist_ok=True)
-    vis_tools.make_vid(dt_imgs, vid_path/'dt.mp4', fps=10)
+    vis_tools.make_vid(dt_imgs, vid_path/('%s.mp4'%tag), fps=10)
