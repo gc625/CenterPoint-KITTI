@@ -14,7 +14,7 @@ from tqdm import tqdm
 from glob import glob
 import argparse
 
-def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None):
+def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None, is_test=False):
     print('=================== drawing images ===================')
     plt.rcParams['figure.dpi'] = 150
     for fid in tqdm(frame_ids):
@@ -22,7 +22,7 @@ def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, 
         vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
         vis_pcd = pcd_formating(vis_pcd)
         ax = plt.gca()
-        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar)
+        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar, is_test=is_test)
         plt.xlim(-0,75)
         plt.ylim(-30,30)
         img_fname = img_path / (fid + '.png')
