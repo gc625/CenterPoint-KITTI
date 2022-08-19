@@ -1,15 +1,18 @@
-# %%
-import matplotlib.pyplot as plt
-import pickle 
-from pathlib import Path as P
-from matplotlib.patches import Rectangle as Rec
 import numpy as np
-from pcdet.utils import calibration_kitti
-from matplotlib.patches import Patch
-from matplotlib.lines import Line2D
+from pathlib import Path as P
+import pickle
+import cv2
+from vod.visualization.settings import label_color_palette_2d
+
+import numpy as np
+from pcdet.utils import calibration_kitti, object3d_kitti
 from tqdm import tqdm
 from vod.visualization.settings import label_color_palette_2d
 
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle as Rec
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 
 def transform_anno(loc, frame_id, is_radar=True, is_test=False):
@@ -137,92 +140,89 @@ def draw_rectangle(ax, anno, color_dict, xz=False):
     for rec in recs:
         ax.add_patch(rec)
 
-
-if __name__ == '__main__':
-    
-    cls_name = ['Car','Pedestrian', 'Cyclist', 'Others']
-
-    
-    
-    # trans-ssd
-    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
-    # ia-ssd
-    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_all/eval/checkpoint_epoch_100')
-    # base model 
-    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint')
-
-    color_dict = {}
-
-    gt_save_dir = root_path / 'GT_all_bev'
-    pred_save_dir = root_path / 'pred_bev'
-    gt_save_dir.mkdir(exist_ok=True)
-    pred_save_dir.mkdir(exist_ok=True)
-
-    for i, v in enumerate(cls_name):
-        color_dict[v] = label_color_palette_2d[v]
-    # load gt
-    with open(str(root_path / 'radar_label.pkl'), 'rb') as f:
-        gt = pickle.load(f)
-
-    # load det
-    with open(str(root_path / 'radar_preds.pkl'), 'rb') as f:
-        dt = pickle.load(f)
-
-    # load centers
-    with open(str(root_path / 'centers.pkl'), 'rb') as f:
-        centers = pickle.load(f)
-
-    # load centers_origin
-    with open(str(root_path / 'centers_origin.pkl'), 'rb') as f:
-        centers_origin = pickle.load(f)
-
-    # load input points (after sampling to 512 points)
-    with open(str(root_path / 'points.pkl'), 'rb') as f:
-        points = pickle.load(f)
-    
-    data_dict = {}
-    def load_data(name):
-        with open(str(root_path / (name + '.pkl')), 'rb') as f:
-            data = pickle.load(f)
-        return data
-    # save_name_list = ('centers', 'centers_origin', 'points', 'match', 'lidar_center', 'lidar_preds', 'radar_preds', 'radar_label')
-    # for name in save_name_list:
-    #     data_dict[name] = load_data(name)
-    # test_recs = anno2plt(dt['00000'][0], color_dict, 2, 0)
-
-    # print(type(points))
-
+def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None, is_test=False):
+    print('=================== drawing images ===================')
     plt.rcParams['figure.dpi'] = 150
-    # fig, ax = plt.subplots()
-    plt.xlim(-0,75)
-    plt.ylim(-30,30)
-    ax = plt.gca()
-
-    # 1. image with center origin and gt annos
-    ids = list(gt.keys())
-    print('=====> drawing detection BEVs')
-    for id in tqdm(ids):
-        img_fname = str(id) + '.png'
-        
-        # print(id,points[id])
-        # draw gt
-        # drawBEV(ax, points[id], centers_origin[id], gt[id], color_dict, id, 'GT')
-        # gt_img_full_fname = str(gt_save_dir / img_fname)
-        # plt.xlim(-0,75)
-        # plt.ylim(-30,30)
-        # plt.savefig(gt_img_full_fname)
-        # ax.clear()
-        
-        # draw pred
-        drawBEV(ax, points[id], centers_origin[id], dt[id], color_dict, id, 'pred')
-        pred_img_full_fname = str(pred_save_dir / img_fname)
+    for fid in tqdm(frame_ids):
+        pcd_fname = data_path / (fid + '.bin')
+        vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
+        vis_pcd = pcd_formating(vis_pcd)
+        ax = plt.gca()
+        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar, is_test=is_test)
         plt.xlim(-0,75)
         plt.ylim(-30,30)
-        plt.savefig(pred_img_full_fname)
-        ax.clear()
-        
-    
-    # plt.show()
+        img_fname = img_path / (fid + '.png')
+        plt.savefig(str(img_fname))
+        plt.cla()
 
+def mask_points_by_range(points, limit_range):
+    mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
+            & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4]) \
+            & (points[:, 2] >= limit_range[2]) & (points[:, 2] <= limit_range[5])
+    return mask
 
-# %%
+def get_radar(fname):
+    assert fname.exists()
+    radar_point_cloud = np.fromfile(str(fname), dtype=np.float32).reshape(-1, 7)
+    return radar_point_cloud
+
+def get_lidar(fname, limit_range):
+    assert fname.exists()
+    lidar_point_cloud = np.fromfile(str(fname), dtype=np.float32).reshape(-1, 4)
+    if limit_range is not None:
+        mask = mask_points_by_range(lidar_point_cloud, limit_range)
+        return lidar_point_cloud[mask]
+    else:
+        return lidar_point_cloud
+
+def pcd_formating(pcd):
+    num_pts = pcd.shape[0]
+    zeros_pad = np.zeros([num_pts, 1])
+    final_pcd = np.concatenate((zeros_pad, pcd), axis=1)
+    return final_pcd
+
+def make_vid(imgs, vid_fname, fps=15):
+    print('=================== making videos ===================')
+    out = None
+    for fname in tqdm(imgs):
+        i = cv2.imread(fname)
+        if out is None:
+            h, w, _ = i.shape
+            size = (w, h)
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(str(vid_fname), fourcc, fps, size)
+            
+        out.write(i)
+    out.release()
+
+def get_label(label_file):
+    return object3d_kitti.get_objects_from_label(label_file)
+
+def load_result_file(label_file):
+    obj_list = get_label(label_file)
+    annotations = {}
+    if len(obj_list) == 0:
+        annotations['name'] = np.array([])       
+        annotations['truncated'] = np.array([])
+        annotations['occluded'] = np.array([])
+        annotations['alpha'] = np.array([])
+        annotations['bbox'] = np.array([])
+        annotations['dimensions'] = np.array([])
+        annotations['location'] = np.array([])
+        annotations['rotation_y'] = np.array([])
+        annotations['score'] = np.array([])
+        annotations['difficulty'] = np.array([])
+
+    else:
+        annotations['name'] = np.array([obj.cls_type for obj in obj_list])
+        annotations['truncated'] = np.array([obj.truncation for obj in obj_list])
+        annotations['occluded'] = np.array([obj.occlusion for obj in obj_list])
+        annotations['alpha'] = np.array([obj.alpha for obj in obj_list])
+        annotations['bbox'] = np.concatenate([obj.box2d.reshape(1, 4) for obj in obj_list], axis=0)
+        annotations['dimensions'] = np.array([[obj.l, obj.h, obj.w] for obj in obj_list])  # lhw(camera) format
+        annotations['location'] = np.concatenate([obj.loc.reshape(1, 3) for obj in obj_list], axis=0)
+        annotations['rotation_y'] = np.array([obj.ry for obj in obj_list])
+        annotations['score'] = np.array([obj.score for obj in obj_list])
+        annotations['difficulty'] = np.array([obj.level for obj in obj_list], np.int32)
+
+    return annotations
