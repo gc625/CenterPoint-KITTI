@@ -2,7 +2,7 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /root/dj/code/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
+    _BASE_CONFIG_: /tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
     # TODO: handle data_processor base on different modality
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
@@ -30,7 +30,7 @@ MODEL:
     DEBUG: False
     NAME: IASSDGAN
     ATTACH_NETWORK:
-        CKPT_FILE: "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
+        CKPT_FILE: "/mnt/sda1/hantao/CenterPoint-KITTI/output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
         BACKBONE_3D:
             NAME: IASSD_Backbone
             SA_CONFIG:

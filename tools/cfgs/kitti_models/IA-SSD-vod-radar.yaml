@@ -26,7 +26,7 @@ DATA_CONFIG:
     #     POINT_FEATURE_ENCODING: {
     #     encoding_type: absolute_coordinates_encoding,
     #     used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
-    #     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'], 
+    #     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'],
     #     }
         #     - NAME: random_world_scaling
         #       WORLD_SCALE_RANGE: [0.95, 1.05]
