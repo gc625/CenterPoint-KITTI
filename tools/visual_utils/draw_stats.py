@@ -215,7 +215,11 @@ def main():
         abs_path = P(__file__).parent.resolve()
         base_path = abs_path.parents[1]
         result_path = base_path / path_dict[tag]
-
+        
+        save_base_path = base_path /'output' / 'vod_vis' / 'stats'
+        save_base_path.mkdir(parents=True,exist_ok=True)
+        
+        # result_path = save_base_path
         print(f'*************   DRAWING PLOTS FOR TAG:{path_dict[tag]}   *************')
 
         with open(str(result_path / 'gt.pkl'), 'rb') as f:
@@ -249,16 +253,17 @@ def main():
                         all_iou_results['Car']['mAP_3d'],
                         all_iou_results['Pedestrian']['mAP_3d'],
                         all_iou_results['Cyclist']['mAP_3d'],
-                        result_path,
+                        result_dir=save_base_path,
+                        fig_name=f'{tag}_iou_thresholds',
                         fig_title=tag)
 
         draw_iou_results(distance_results['distances'],
                         distance_results['Car']['mAP_3d'],
                         distance_results['Pedestrian']['mAP_3d'],
                         distance_results['Cyclist']['mAP_3d'],
-                        result_path,
+                        result_dir=save_base_path,
                         is_distance=True,
-                        fig_name='distances',
+                        fig_name=f'{tag}_distances',
                         xlabel="Distance from ego-vehicle",
                         fig_title=tag)
 
