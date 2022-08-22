@@ -2,7 +2,7 @@
 CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: /tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
+    _BASE_CONFIG_: /cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
     # TODO: handle data_processor base on different modality
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
@@ -25,14 +25,18 @@ DATA_CONFIG:
             }
 
 USE_ATTACH: True
+FREEZE_RADAR_BACKBONE: True
 # FREEZE_MODE: head
 MODEL:
     DEBUG: False
-    NAME: IASSDGAN
+    NAME: IASSDGAN_tidying
     ATTACH_NETWORK:
         CKPT_FILE: "output/IA-SSD-vod-lidar/all_cls/ckpt/checkpoint_epoch_80.pth"
         BACKBONE_3D:
             NAME: IASSD_Backbone
+            # ========= for evaluation only ==========
+            # SAVE_FEAT_DIR: 'output/IA-SSD-GAN-vod-aug/radarout384/eval/inter_feats/attach'
+            # ========================================
             SA_CONFIG:
                 # Sampling setting:
                 NPOINT_LIST: [[4096], [1024], [512], [256], [-1], [256]]
@@ -51,18 +55,21 @@ MODEL:
                 DILATED_GROUP: [False, False, False, False, False, False]            
                 AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
                 # Instance-aware setting:
-                CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
-
+                CONFIDENCE_MLPS: [[], [128], [256], [], [], []] 
+                EUCLIDEAN_MASK: [False, False, False, False, False, False] 
                 LAYER_INPUT: [0, 1, 2, 3, 4, 3]
                 CTR_INDEX: [-1, -1, -1, -1, -1, 5]
                 MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
     CROSS_OVER:
         CH_IN: 512
         MLPS: [448, 384, 320, 256]
-        LOSS_WEIGHTS: [1, 1] # [matching, recover]
+        LOSS_WEIGHTS: [1, 1] # matching
     
     BACKBONE_3D:
         NAME: IASSD_Backbone
+        # ========= for evaluation only ==========
+        # SAVE_FEAT_DIR: '/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/radarout384/eval/inter_feats/main_branch'
+        # ========================================
         SA_CONFIG:
             # Sampling setting:
             NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
@@ -83,7 +90,7 @@ MODEL:
             AGGREGATION_MLPS: [[64], [128], [256], [256], [], [512]]
             # Instance-aware setting:
             CONFIDENCE_MLPS: [[], [128], [256], [], [], []]
-
+            EUCLIDEAN_MASK: [False, False, False, False, False, False]
             LAYER_INPUT: [0, 1, 2, 3, 4, 3]
             CTR_INDEX: [-1, -1, -1, -1, -1, 5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
@@ -106,6 +113,18 @@ MODEL:
             CTR_INDEX: [5]
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
 
+
+    USE_FEAT_AUG: True
+    # FEAT_AUG: 
+    #     NAME: MLP_AUG
+    FEAT_AUG:
+        CH_IN: 512
+        MLPS: [448, 384, 320, 256]
+        LOSS_WEIGHTS: [1] # matching only
+        RELU: True
+        BN: True
+
+    
 
     POINT_HEAD:
         NAME: IASSD_Head
@@ -159,8 +178,8 @@ MODEL:
         NUM_POINT_FEATURES: 256
         POINT_HEAD:
             NAME: IASSD_Head
-            CLS_FC: [256, 256]
-            REG_FC: [256, 256]
+            CLS_FC: [256,256] 
+            REG_FC: [256,256]
             CLASS_AGNOSTIC: False
             USE_POINT_FEATURES_BEFORE_FUSION: False
             TARGET_CONFIG:
@@ -196,8 +215,8 @@ MODEL:
                 CENTERNESS_REGULARIZATION: True
                 CENTERNESS_REGULARIZATION_SA: True
                 LOSS_WEIGHTS: {
-                    'ins_aware_weight': [0, 1, 1],
-                    'vote_weight': 1,
+                    'ins_aware_weight': [0, 0, 0],
+                    'vote_weight': 0,
                     'point_cls_weight': 1.0,
                     'point_box_weight': 1.0,
                     'corner_weight': 1.0,
@@ -225,7 +244,11 @@ OPTIMIZATION:
     NUM_EPOCHS: 80
 
     OPTIMIZER: adam_onecycle
-    LR: 0.01
+    # try to lower the LR for fine-tuning, 
+    # we should obtain the best performance within 20 epoches
+    # If we want to train from scratch, increase the LR together with the LR_DECAY
+    # LR: 0.005
+    LR: 0.0003
     WEIGHT_DECAY: 0.01
     MOMENTUM: 0.9
 

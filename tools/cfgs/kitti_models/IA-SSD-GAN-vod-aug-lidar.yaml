@@ -31,9 +31,9 @@ USE_ATTACH: True
 # FREEZE_MODE: head
 MODEL:
     DEBUG: False
-    NAME: IASSDGAN_tidying
+    NAME: IASSDGAN
     ATTACH_NETWORK:
-        CKPT_FILE: "/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_vcomp_only/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
+        CKPT_FILE: "output/IA-SSD-vod-radar/iassd_vcomp_only/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
         NUM_POINT_FEATURES: 4
         BACKBONE_3D:
             NAME: IASSD_Backbone
