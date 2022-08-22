@@ -155,6 +155,26 @@ def saveODImgs(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, 
         plt.savefig(str(img_fname))
         plt.cla()
 
+def saveODImgs_multithread(frame_ids, anno, data_path, img_path, color_dict, is_radar=True, title='pred', limit_range=None, is_test=False, workers=8):
+    print('=================== drawing images ===================')
+    plt.rcParams['figure.dpi'] = 150
+    from tqdm.contrib.concurrent import process_map
+
+    def draw_img(fid):
+        pcd_fname = data_path / (fid + '.bin')
+        vis_pcd = get_radar(pcd_fname) if is_radar else get_lidar(pcd_fname, limit_range=limit_range)
+        vis_pcd = pcd_formating(vis_pcd)
+        ax = plt.gca()
+        drawBEV(ax, vis_pcd, None, anno[fid], color_dict, fid, title, is_radar=is_radar, is_test=is_test)
+        plt.xlim(-0,75)
+        plt.ylim(-30,30)
+        img_fname = img_path / (fid + '.png')
+        plt.savefig(str(img_fname))
+        plt.cla()
+    def print_fid(fids):
+        print(fids)
+    process_map(print_fid, frame_ids, max_workers=workers, chunksize=len(frame_ids)//workers)
+
 def mask_points_by_range(points, limit_range):
     mask = (points[:, 0] >= limit_range[0]) & (points[:, 0] <= limit_range[3]) \
             & (points[:, 1] >= limit_range[1]) & (points[:, 1] <= limit_range[4]) \

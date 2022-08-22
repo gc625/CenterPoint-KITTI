@@ -23,13 +23,14 @@ if __name__ == '__main__':
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
 
-    tag = 'CFAR_radar'
+    tag = 'tr19'
 
-    vis_root_path = base_path / path_dict[tag]
-    test_result_path = vis_root_path / 'final_result' / 'data'
+    # vis_root_path = base_path / path_dict[tag]
+    # test_result_path = vis_root_path / 'final_result' / 'data'
+    test_result_path = P('/root/dj/code/CenterPoint-KITTI/output/root/gabriel/code/parent/CenterPoint-KITTI/RESULTS/tr19')
     test_result_files = sorted(glob(str(test_result_path / '*.txt')))
-    is_radar = False if 'lidar' in tag.lower() else True
-    # is_radar = False
+    # is_radar = False if 'lidar' in tag.lower() else True
+    is_radar = False
     is_test = True
     modality = 'radar' if is_radar else 'lidar'
     split = 'testing' if is_test else 'training'
@@ -62,7 +63,9 @@ if __name__ == '__main__':
     vis_img_path.mkdir(exist_ok=True, parents=True)
     vis_tools.saveODImgs(frame_ids, annas_dict, pcd_file_path, vis_img_path, color_dict,\
         is_radar, title='test', limit_range=lidar_range, is_test=True)
-
+    
+    # vis_tools.saveODImgs_multithread(frame_ids, annas_dict, pcd_file_path, vis_img_path, color_dict,\
+    #     is_radar, title='test', limit_range=lidar_range, is_test=True)
     dt_imgs = sorted(glob(str(vis_img_path/'*.png')))
     vid_path = base_path/'output'
     vid_path.mkdir(exist_ok=True)
