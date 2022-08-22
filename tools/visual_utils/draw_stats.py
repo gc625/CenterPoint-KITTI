@@ -265,6 +265,15 @@ def main():
         # print out the stuff 
         print_results(all_iou_results,distance_results)
 
+        save_stats = True
+
+        if save_stats:
+            with open(result_path / 'all_iou_results.pkl', 'wb') as f:
+                pickle.dump(all_iou_results, f)
+
+            with open(result_path / 'distance_results.pkl', 'wb') as f:
+                pickle.dump(distance_results, f)    
+
 
 if __name__ == "__main__":
     main()
