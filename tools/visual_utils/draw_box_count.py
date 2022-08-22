@@ -49,7 +49,7 @@ def get_bbx_param(obj_info):
     obbx = o3d.geometry.OrientedBoundingBox(center.T, rot_m, extent.T)
     return obbx
 
-def count_points_in_box(pkl_file, is_radar, is_dt):
+def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
     for key in pkl_file.keys():
         if is_dt:
             anno = pkl_file[key][0]
@@ -59,11 +59,10 @@ def count_points_in_box(pkl_file, is_radar, is_dt):
         yaw = anno['rotation_y']
         extent = anno['dimensions']
         if is_radar:
-            data_path = P('/mnt/sda1/hantao/CenterPoint-KITTI/data/vod_radar/training/velodyne')
             pc = get_radar(data_path / (key + '.bin'))
         else:
-            data_path = P('/mnt/sda1/hantao/CenterPoint-KITTI/data/vod_lidar/training/velodyne')
             pc = get_lidar(data_path / (key + '.bin'))
+
         pc = pcd_formating(pc)
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(pc[:,1:4])
@@ -184,17 +183,17 @@ def draw_results(counts_threshold,
 
 def main():
     path_dict = {
-        'CFAR_radar':'IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
-        'radar_rcsv':'IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
-        'radar_rcs':'IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
-        'radar_v':'IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
-        'radar':'IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
-        'lidar_i':'IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
-        'lidar':'IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
-        'CFAR_lidar_rcsv':'IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
-        'CFAR_lidar_rcs':'IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
-        'CFAR_lidar_v':'IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
-        'CFAR_lidar':'IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
+        'CFAR_radar':'output/IA-SSD-GAN-vod-aug/radar48001_512all/eval/best_epoch_checkpoint',
+        'radar_rcsv':'output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
+        'radar_rcs':'output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
+        'radar_v':'output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
+        'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'lidar_i':'output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
+        'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcsv':'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
+        'CFAR_lidar_rcs':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar_v':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
+        'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
     }
     is_radar = {
         'CFAR_radar': True,
@@ -211,10 +210,16 @@ def main():
     }
 
     for tag in path_dict.keys():
-        # abs_path = P(__file__).parent.resolve()
-        # base_path = abs_path.parents[1]
-        base_path = P('/mnt/12T/DJ/PCDet_output')
+        abs_path = P(__file__).parent.resolve()
+        base_path = abs_path.parents[1]
+        # base_path = P('/mnt/12T/DJ/PCDet_output')
         result_path = base_path / path_dict[tag]
+
+        modality = 'radar' if  is_radar[tag] else 'lidar'
+        data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
+
+        save_path = base_path /'output' / 'vod_vis' / 'box_count'
+        save_path.mkdir(parents=True,exist_ok=True)
 
         print(f'*************   DRAWING PLOTS FOR TAG:{path_dict[tag]}   *************')
 
@@ -229,8 +234,8 @@ def main():
         
         # import ipdb; ipdb.set_trace()
 
-        gt = count_points_in_box(gt, is_radar[tag], is_dt=False)
-        dt = count_points_in_box(dt, is_radar[tag], is_dt=True)
+        gt = count_points_in_box(gt, is_radar[tag], is_dt=False,data_path=data_path)
+        dt = count_points_in_box(dt, is_radar[tag], is_dt=True,data_path=data_path)
 
         # load gt boxes
         new_gt = []
@@ -252,7 +257,7 @@ def main():
                         distance_results['Car']['mAP_3d'],
                         distance_results['Pedestrian']['mAP_3d'],
                         distance_results['Cyclist']['mAP_3d'],
-                        P('/mnt/sda1/hantao/CenterPoint-KITTI/temp'),
+                        save_path,
                         fig_name='box_point_count_' + str(tag),
                         fig_title=tag)
 
