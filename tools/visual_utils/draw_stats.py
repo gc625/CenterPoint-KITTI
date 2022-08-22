@@ -40,7 +40,8 @@ def draw_iou_results(iou_thresholds,
                 result_dir,
                 is_distance=False,
                 fig_name=None,
-                xlabel=None):
+                xlabel=None,
+                fig_title=None):
     fig, ax = plt.subplots(1)
 
     car_color = label_color_palette_2d['Car']
@@ -85,8 +86,11 @@ def draw_iou_results(iou_thresholds,
     else:
         fig_path = result_dir / 'iou_threshold.png'
 
+    if fig_title is not None:
+        ax.set_title(fig_title)
+
     fig.savefig(fig_path)
-    
+    plt.close()
 
 
 def get_all_iou_results(gt_annos,
@@ -245,7 +249,8 @@ def main():
                         all_iou_results['Car']['mAP_3d'],
                         all_iou_results['Pedestrian']['mAP_3d'],
                         all_iou_results['Cyclist']['mAP_3d'],
-                        result_path)
+                        result_path,
+                        fig_title=tag)
 
         draw_iou_results(distance_results['distances'],
                         distance_results['Car']['mAP_3d'],
@@ -254,7 +259,8 @@ def main():
                         result_path,
                         is_distance=True,
                         fig_name='distances',
-                        xlabel="Distance from ego-vehicle")
+                        xlabel="Distance from ego-vehicle",
+                        fig_title=tag)
 
         # print out the stuff 
         print_results(all_iou_results,distance_results)
