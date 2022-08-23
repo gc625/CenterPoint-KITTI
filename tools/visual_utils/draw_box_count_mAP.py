@@ -233,7 +233,8 @@ def main():
         modality = 'radar' if  is_radar[tag] else 'lidar'
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_path = base_path /'temp'
+        # save_path = base_path /'temp'
+        save_path = base_path /'output' / 'vod_vis' / 'box_count'
         save_path.mkdir(parents=True,exist_ok=True)
 
         print(f'*************   DRAWING PLOTS FOR TAG:{path_dict[tag]}   *************')

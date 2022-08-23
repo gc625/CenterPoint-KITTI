@@ -420,7 +420,8 @@ def main():
         modality = 'radar' if  is_radar[tag] else 'lidar'
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_path = base_path / 'vod_vis' / 'box_count'
+        # save_path = base_path / 'vod_vis' / 'box_count'
+        save_path = base_path / 'output' / 'vod_vis' / 'box_count'
         # save_path = base_path / 'output' / 'vod_vis' / 'points_in_box_bar'
         save_path.mkdir(parents=True,exist_ok=True)
 
