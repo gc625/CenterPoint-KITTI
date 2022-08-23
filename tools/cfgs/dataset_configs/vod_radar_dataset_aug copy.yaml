@@ -78,4 +78,4 @@ DATA_PROCESSOR:
       MAX_NUMBER_OF_VOXELS: {
         'train': 16000,
         'test': 40000
-    }
+      }

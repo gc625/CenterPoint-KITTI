@@ -136,23 +136,58 @@ def counts_tp_dt_boxes(gt_annos, dt_annos, current_classes, difficultys, metric,
     return result_dir
 
 def generate_range(start, end, step):
-    result = []
-    while start < end:
-        new_range = [start, start+step]
-        result.append(new_range)
-        start += step
+    start_range = list(range(start, end, step))
+    end_range = list(range(start+step, end+step, step))
+
+    # append infinity
+    start_range += [end_range[-1]]
+    end_range += [float('inf')]
+
+    result = np.array([start_range, end_range])
+    result = result.T
+    # result = result.astype(int)
     return result
+
+def get_radar_range():
+    start_range = [0, 1, 3, 6, 10]
+    end_range = [1, 3, 6, 10, float('inf')]
+    result = np.array([start_range, end_range])
+    # result = result.astype(int)
+    return result.T
+
+
+def get_lidar_range():
+    start_range = [0, 1, 20, 60, 120, 200]
+    end_range = [1, 20, 60, 120, 200, float('inf')]
+    result = np.array([start_range, end_range])
+    return result.T
 
 def get_all_box_count_result(gt_annos, dt_annos, current_classes, is_radar):
     difficulties = [0]
     if is_radar:
-        point_counts_in_box = generate_range(0, 20, 2)
+        point_counts_in_box = get_radar_range()
     else:
-        point_counts_in_box = generate_range(0, 1000, 100)
+        point_counts_in_box = get_lidar_range()
     overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.5], 
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
     iou_threshold = np.expand_dims(overlap_0_5,axis=0)
+
+    cnt_str =  [f"{counts_threshold[0]}-{counts_threshold[1]}" for counts_threshold in point_counts_in_box]
+
+    def get_cnt_str(point_counts_in_box):
+        str_list = []
+        for thres in point_counts_in_box:
+            start_str = str(int(thres[0]))
+            if thres[1] == np.inf:
+                end_str = 'inf'
+            else:
+                end_str = str(int(thres[1]))
+            cur_str = '[%s, %s)' % (start_str, end_str)
+            str_list += [cur_str]
+        return str_list
+
+    str_list = get_cnt_str(point_counts_in_box)
 
     count_results = {
         'Car': {
@@ -170,7 +205,7 @@ def get_all_box_count_result(gt_annos, dt_annos, current_classes, is_radar):
             'gt_counts': [],
             'dt_tp_counts': []
         },
-        'counts': [f"{counts_threshold[0]}-{counts_threshold[1]}" for counts_threshold in point_counts_in_box]
+        'counts': str_list
     }
 
     for counts_threshold in point_counts_in_box:
@@ -248,15 +283,16 @@ def draw_result_combine(count_result,
     fig, ax = plt.subplots(1, figsize=(28,8))
     
     n_groups = len(count_result['counts'])
-    index = np.arange(n_groups)
+    index = np.arange(n_groups)/3
 
-    bar_width = 0.3
+    bar_width = 0.1
 
+    ax.grid(axis = 'y')
     car_color = label_color_palette_2d['Car']
     ped_color = label_color_palette_2d['Pedestrian']
     cyclist_color = label_color_palette_2d['Cyclist']
 
-    ax.bar(index, count_result['Car']['dt_tp_counts'], bar_width, color=car_color)
+    dt_car = ax.bar(index, count_result['Car']['dt_tp_counts'], bar_width, color=car_color)
     ax.bar(index, np.array(count_result['Car']['gt_counts']) - np.array(count_result['Car']['dt_tp_counts']),
             bar_width,bottom=count_result['Car']['dt_tp_counts'], color=adjust_lightness(car_color, 0.1))
 
@@ -271,7 +307,7 @@ def draw_result_combine(count_result,
         )
 
 
-    ax.bar(index+bar_width, count_result['Pedestrian']['dt_tp_counts'], bar_width, color=ped_color)
+    dt_pred = ax.bar(index+bar_width, count_result['Pedestrian']['dt_tp_counts'], bar_width, color=ped_color)
     ax.bar(index+bar_width, np.array(count_result['Pedestrian']['gt_counts']) - np.array(count_result['Pedestrian']['dt_tp_counts']),
             bar_width,bottom=count_result['Pedestrian']['dt_tp_counts'], color=adjust_lightness(car_color, 0.1))
     
@@ -284,8 +320,8 @@ def draw_result_combine(count_result,
             rect.get_x() + rect.get_width() / 2, height + 10, '{:.2f}%'.format(labels[i]), ha="center", va="bottom"
         )
 
-    ax.bar(index+bar_width*2, count_result['Cyclist']['dt_tp_counts'], bar_width, color=cyclist_color)
-    ax.bar(index+bar_width*2, np.array(count_result['Cyclist']['gt_counts']) - np.array(count_result['Cyclist']['dt_tp_counts']),
+    dt_cyclist = ax.bar(index+bar_width*2, count_result['Cyclist']['dt_tp_counts'], bar_width, color=cyclist_color)
+    gt = ax.bar(index+bar_width*2, np.array(count_result['Cyclist']['gt_counts']) - np.array(count_result['Cyclist']['dt_tp_counts']),
             bar_width,bottom=count_result['Cyclist']['dt_tp_counts'], color=adjust_lightness(car_color, 0.1))
     
     based += offset * 2
@@ -300,23 +336,24 @@ def draw_result_combine(count_result,
     ax.set_xlabel('# of points in the boxes') 
     ax.set_ylabel('# of boxes')
 
-    ax.grid(axis = 'y')
     
     overall_legend = []
     class_name = 'Car'
-    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0]), 'GT %s Boxes Counts' % (class_name)]
+    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0])]
     overall_legend = overall_legend + legend
     class_name = 'Pedestrian'
-    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0]), 'GT %s Boxes Counts' % (class_name)]
+    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0])]
     overall_legend = overall_legend + legend
     class_name = 'Cyclist'
-    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0]), 'GT %s Boxes Counts' % (class_name)]
+    legend = ['Pred %s 3D IoU@%s' % (class_name, count_result[class_name]['min_overlap'][0]), 'GT Boxes Counts']
     overall_legend = overall_legend + legend
 
-    ax.legend(overall_legend)
+    ax.legend([dt_car, dt_pred, dt_cyclist, gt], overall_legend)
 
     ax.set_xticks(index+bar_width, count_result['counts'])
-
+    
+    bottom, top = plt.ylim()
+    plt.ylim(bottom, top)
     for label in ax.get_yticklabels()[1::2]:
         label.set_visible(False)
         # plt.xlim(xmin=0) 
@@ -326,14 +363,17 @@ def draw_result_combine(count_result,
     if fig_name is not None:
         fig_path = result_dir / (fig_name+'.png')
     else:
-        fig_path = result_dir / 'iou_threshold.png'
+        fig_path = result_dir / 'box_count_bar.png'
 
     if fig_title is not None:
         ax.set_title(fig_title)
-
+    fig.set_figheight(6)
+    fig.set_figwidth(len(count_result['counts']) * 3)
     fig.savefig(fig_path)
     plt.close()
-
+    print('===========================================')
+    print('saved drawing for %s ' % fig_path)
+    print('===========================================')
 
 
 def main():
@@ -342,9 +382,9 @@ def main():
         'radar_rcsv':'output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint',
         'radar_rcs':'output/IA-SSD-vod-radar/iassd_rcs/eval/best_epoch_checkpoint',
         'radar_v':'output/IA-SSD-vod-radar/iassd_vcomp_only/eval/best_epoch_checkpoint',
-        'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        # 'radar':'output/IA-SSD-vod-radar-block-feature/only_xyz/eval/best_epoch_checkpoint',
         'lidar_i':'output/IA-SSD-vod-lidar/all_cls/eval/checkpoint_epoch_80',
-        'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
+        # 'lidar':'output/IA-SSD-vod-lidar-block-feature/only_xyz/eval/best_epoch_checkpoint',
         'CFAR_lidar_rcsv':'output/IA-SSD-GAN-vod-aug-lidar/to_lidar_5_feat/eval/best_epoch_checkpoint',
         'CFAR_lidar_rcs':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_rcs_only/eval/best_epoch_checkpoint',
         'CFAR_lidar_v':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_vcomp_only/eval/best_epoch_checkpoint',
@@ -365,6 +405,7 @@ def main():
     }
 
     for tag in path_dict.keys():
+        # tag = 'radar_rcs'
         abs_path = P(__file__).parent.resolve()
         base_path = abs_path.parents[1]
         # base_path = P('/mnt/12T/DJ/PCDet_output')
@@ -373,7 +414,7 @@ def main():
         modality = 'radar' if  is_radar[tag] else 'lidar'
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_path = base_path / 'vod_vis' / 'box_count'
+        save_path = base_path / 'output' / 'vod_vis' / 'box_count'
         # save_path = base_path / 'output' / 'vod_vis' / 'points_in_box_bar'
         save_path.mkdir(parents=True,exist_ok=True)
 
@@ -409,56 +450,37 @@ def main():
         print(count_results)
 
         # draw plots
-        draw_results(count_results['counts'],
-                count_results['Car'],
-                save_path,
-                class_name = 'Car',
-                color=label_color_palette_2d['Car'],
-                fig_name='box_point_count_' + str(tag) + '_Car',
-                fig_title=tag)
+        # draw_results(count_results['counts'],
+        #         count_results['Car'],
+        #         save_path,
+        #         class_name = 'Car',
+        #         color=label_color_palette_2d['Car'],
+        #         fig_name='box_point_count_' + str(tag) + '_Car',
+        #         fig_title=tag)
         
-        draw_results(count_results['counts'],
-                count_results['Pedestrian'],
-                save_path,
-                class_name = 'Pedestrian',
-                color=label_color_palette_2d['Pedestrian'],
-                fig_name='box_point_count_' + str(tag) + '_Pedestrian',
-                fig_title=tag)
+        # draw_results(count_results['counts'],
+        #         count_results['Pedestrian'],
+        #         save_path,
+        #         class_name = 'Pedestrian',
+        #         color=label_color_palette_2d['Pedestrian'],
+        #         fig_name='box_point_count_' + str(tag) + '_Pedestrian',
+        #         fig_title=tag)
         
-        draw_results(count_results['counts'],
-                count_results['Cyclist'],
-                save_path,
-                class_name = 'Cyclist',
-                color=label_color_palette_2d['Cyclist'],
-                fig_name='box_point_count_' + str(tag) + '_Cyclist',
-                fig_title=tag)
+        # draw_results(count_results['counts'],
+        #         count_results['Cyclist'],
+        #         save_path,
+        #         class_name = 'Cyclist',
+        #         color=label_color_palette_2d['Cyclist'],
+        #         fig_name='box_point_count_' + str(tag) + '_Cyclist',
+        #         fig_title=tag)
         
         # draw combine plots
+        print('===========================================')
         draw_result_combine(count_results,save_path,fig_name='box_point_count_' + str(tag) + '_COMBINE',fig_title=tag)
-
-
-        # draw_results(distance_results['counts'],
-        #                 distance_results['Car']['mAP_3d'],
-        #                 distance_results['Pedestrian']['mAP_3d'],
-        #                 distance_results['Cyclist']['mAP_3d'],
-        #                 save_path,
-        #                 fig_name='box_point_count_' + str(tag),
-        #                 fig_title=tag)
-
-
-
-        # print out the stuff 
-        # print_results(all_iou_results,distance_results)
-
-        # save_stats = True
-
-        # if save_stats:
-        #     with open(result_path / 'all_iou_results.pkl', 'wb') as f:
-        #         pickle.dump(all_iou_results, f)
-
-        #     with open(result_path / 'distance_results.pkl', 'wb') as f:
-        #         pickle.dump(distance_results, f)    
-
+        print('saved drawing for %s ' % tag)
+        print('===========================================')
+ 
+        # break
 
 if __name__ == "__main__":
     main()
