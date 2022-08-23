@@ -40,13 +40,13 @@ def get_rotation(yaw):
 def get_bbx_param(obj_info):
 
     center = obj_info[:3]
-    extent = obj_info[3:6] + np.array([0, 0, 10])
-    angle = -obj_info[6]
-    # center[-1] += 0.5 * extent[-1]
+    extent = obj_info[3:6]
+    angle = -(obj_info[6] + np.pi / 2)
+    center[-1] += 0.5 * extent[-1]
 
     rot_m = get_rotation(angle)
 
-    obbx = o3d.geometry.OrientedBoundingBox(center.T, rot_m, extent.T)
+    obbx = o3d.geometry.OrientedBoundingBox(center, rot_m, extent)
     return obbx
 
 def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
@@ -69,13 +69,19 @@ def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
         points_in_box_count = []
         for cur_label_idx in range(len(anno['name'])):
             x, y, z = transform_anno(loc[cur_label_idx], key, is_radar=is_radar)
-            dx, dy, dz = extent[cur_label_idx]
+            dx, dz, dy = extent[cur_label_idx] # l, h ,w
             rot_y = yaw[cur_label_idx]
             obj_info = np.array([x, y, z, dx, dy, dz, rot_y])
             box = get_bbx_param(obj_info)
             ctr_idx = box.get_point_indices_within_bounding_box(pcd.points)
             points_in_box_count.append(len(ctr_idx))
         anno['points_in_box_count'] = points_in_box_count
+        if not is_dt and key == '00050' and not is_radar:
+            # debug
+            print(points_in_box_count)
+            print(points_in_box_count)
+            print(points_in_box_count)
+            # import ipdb;ipdb.set_trace()
     return pkl_file
 
 def adjust_lightness(color, amount=0.5):
@@ -414,7 +420,7 @@ def main():
         modality = 'radar' if  is_radar[tag] else 'lidar'
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_path = base_path / 'output' / 'vod_vis' / 'box_count'
+        save_path = base_path / 'vod_vis' / 'box_count'
         # save_path = base_path / 'output' / 'vod_vis' / 'points_in_box_bar'
         save_path.mkdir(parents=True,exist_ok=True)
 

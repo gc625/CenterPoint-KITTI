@@ -40,13 +40,13 @@ def get_rotation(yaw):
 def get_bbx_param(obj_info):
 
     center = obj_info[:3]
-    extent = obj_info[3:6] + np.array([0, 0, 10])
-    angle = -obj_info[6]
-    # center[-1] += 0.5 * extent[-1]
+    extent = obj_info[3:6]
+    angle = -(obj_info[6] + np.pi / 2)
+    center[-1] += 0.5 * extent[-1]
 
     rot_m = get_rotation(angle)
 
-    obbx = o3d.geometry.OrientedBoundingBox(center.T, rot_m, extent.T)
+    obbx = o3d.geometry.OrientedBoundingBox(center, rot_m, extent)
     return obbx
 
 def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
@@ -69,7 +69,7 @@ def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
         points_in_box_count = []
         for cur_label_idx in range(len(anno['name'])):
             x, y, z = transform_anno(loc[cur_label_idx], key, is_radar=is_radar)
-            dx, dy, dz = extent[cur_label_idx]
+            dx, dz, dy = extent[cur_label_idx] # l, h ,w
             rot_y = yaw[cur_label_idx]
             obj_info = np.array([x, y, z, dx, dy, dz, rot_y])
             box = get_bbx_param(obj_info)
@@ -78,12 +78,27 @@ def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
         anno['points_in_box_count'] = points_in_box_count
     return pkl_file
 
+def get_radar_range():
+    start_range = [0, 1, 3, 6, 10]
+    end_range = [1, 3, 6, 10, float('inf')]
+    result = np.array([start_range, end_range])
+    # result = result.astype(int)
+    return result.T
+
+
+def get_lidar_range():
+    start_range = [0, 1, 20, 60, 120, 200]
+    end_range = [1, 20, 60, 120, 200, float('inf')]
+    result = np.array([start_range, end_range])
+    return result.T
+
 def get_all_box_count_result(gt_annos, dt_annos, current_classes, is_radar):
     difficulties = [0]
     if is_radar:
-        point_counts_in_box = [[0,5], [5,10], [15,20], [20,25], [25,30], [30,35],[35, 40],[40, 45],[45, 50]]
+        point_counts_in_box = get_radar_range()
     else:
-        point_counts_in_box = [[0,100], [100,200], [200,300], [300,400], [400,500], [500,600],[600, 700],[700, 800],[800, 900]]
+        # point_counts_in_box = [[0,100], [100,200], [200,300], [300,400], [400,500], [500,600],[600, 700],[700, 800],[800, 900]]
+        point_counts_in_box = get_lidar_range()
     overlap_0_5 = np.array([[0.7, 0.5, 0.5, 0.7, 0.5, 0.5], 
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5],
                             [0.5, 0.25, 0.25, 0.5, 0.25, 0.5]])
@@ -218,7 +233,7 @@ def main():
         modality = 'radar' if  is_radar[tag] else 'lidar'
         data_path = base_path / ('data/vod_%s/training/velodyne'%modality )
 
-        save_path = base_path /'output' / 'vod_vis' / 'box_count'
+        save_path = base_path /'temp'
         save_path.mkdir(parents=True,exist_ok=True)
 
         print(f'*************   DRAWING PLOTS FOR TAG:{path_dict[tag]}   *************')
