@@ -76,12 +76,12 @@ def count_points_in_box(pkl_file, is_radar, is_dt,data_path):
             ctr_idx = box.get_point_indices_within_bounding_box(pcd.points)
             points_in_box_count.append(len(ctr_idx))
         anno['points_in_box_count'] = points_in_box_count
-        if not is_dt and key == '00050' and not is_radar:
-            # debug
-            print(points_in_box_count)
-            print(points_in_box_count)
-            print(points_in_box_count)
-            # import ipdb;ipdb.set_trace()
+        # if not is_dt and key == '00050' and not is_radar:
+        #     # debug
+        #     print(points_in_box_count)
+        #     print(points_in_box_count)
+        #     print(points_in_box_count)
+        #     # import ipdb;ipdb.set_trace()
     return pkl_file
 
 def adjust_lightness(color, amount=0.5):
