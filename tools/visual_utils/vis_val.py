@@ -95,13 +95,11 @@ if __name__ == '__main__':
         'centerpoint_radar_rcsv': 'output/centerpoint_vod_radar/rcsv/eval/best_epoch_checkpoint',
         'pp_lidar': 'output/pointpillar_vod_lidar/debug_new/eval/checkpoint_epoch_80',
         '3dssd_lidar': 'output/3DSSD_vod_lidar/all_cls/eval/checkpoint_epoch_80',
-        
+        'second_radar_rcs': 'output/second_vod_radar/radar_second_with_aug/eval/checkpoint_epoch_80'.
+        'second_radar_rscv': 'output/second_vod_radar/pp_radar_rcs_doppler/eval/checkpoint_epoch_80'
     }
 
-    # todo = {
-    #     'second_radar_rcs': ''.
-    #     'second_radar_rcsv': '',
-    # }
+    ## todo: centerpoint-lidar
 
 
     draw_gt = True
