@@ -127,11 +127,12 @@ rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 # you execute `sbatch --array=1:100 ...` the jobs will get numbers 1 to 100
 # inclusive.
 
-experiment_text_file=$1
-COMMAND="`sed \"${SLURM_ARRAY_TASK_ID}q;d\" ${experiment_text_file}`"
-echo "Running provided command: ${COMMAND}"
-eval "${COMMAND}"
-echo "Command ran successfully!"
+cd $repo_home/Centerpoint-kitti
+ln -s ${dest_path}/lidar ./data/vod_lidar
+ln -s ${dest_path}/radar ./data/vod_radar
+python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
+cd ./tools
+python ./tools/train.py --cfg_file ./tools/cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
 
 
 # ======================================
