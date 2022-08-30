@@ -119,11 +119,6 @@ mkdir -p ${dest_path}  # make it if required
 
 rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 
-# Create softlink to scratch dataset dir
-ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
-ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
-
-
 # ==============================
 # Finally, run the experiment!
 # ==============================
