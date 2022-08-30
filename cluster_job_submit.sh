@@ -100,7 +100,7 @@ conda activate ${CONDA_ENV_NAME}
 echo "Moving input data to the compute node's scratch space: $SCRATCH_DISK"
 
 # input data directory path on the DFS - change line below if loc different
-repo_home=/home/${USER}/Centerpoint-kitti
+repo_home=/home/${USER}/CenterPoint-KITTI
 src_path=/home/${USER}/dataset/view_of_delft_PUBLIC
 
 # input data directory path on the scratch disk of the node
@@ -128,11 +128,17 @@ rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 # inclusive.
 
 cd $repo_home
+if [ -f "${repo_home}/data/vod_lidar" ] ; then
+    rm "${repo_home}/data/vod_lidar"
+fi
+if [ -f "${repo_home}/data//vod_radar" ] ; then
+    rm "${repo_home}/data//vod_radar"
+fi
 ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
 ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
 python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
 cd ./tools
-python ./tools/train.py --cfg_file ./tools/cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
+python train.py --cfg_file cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
 
 
 # ======================================
