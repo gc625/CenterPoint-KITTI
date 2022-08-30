@@ -20,26 +20,28 @@
 # ====================
 
 # Location for stdout log - see https://slurm.schedmd.com/sbatch.html#lbAH
-SBATCH --output=/home/%u/slurm_logs/slurm-%A_%a.out
+# SBATCH --output=/home/%u/slurm_logs/slurm-%A_%a.out
 
 # Location for stderr log - see https://slurm.schedmd.com/sbatch.html#lbAH
-SBATCH --error=/home/%u/slurm_logs/slurm-%A_%a.out
+# SBATCH --error=/home/%u/slurm_logs/slurm-%A_%a.out
 
 # Maximum number of nodes to use for the job
-# #SBATCH --nodes=1
+# SBATCH --nodes=1
 
 # Generic resources to use - typically you'll want gpu:n to get n gpus
-SBATCH --gres=gpu:1
+# SBATCH --gres=gpu:1
 
 # Megabytes of RAM required. Check `cluster-status` for node configurations
-SBATCH --mem=16000
+# SBATCH --mem=16000
 
 # Number of CPUs to use. Check `cluster-status` for node configurations
-SBATCH --cpus-per-task=8
+# SBATCH --cpus-per-task=24
 
 # Maximum time for the job to run, format: days-hours:minutes:seconds
-SBATCH --time=04:00:00
+# SBATCH --time=04:00:00
 
+# Recommend setto certain node so we don't waste time copy dataset
+# SBATCH --nodelist=landonia02
 
 # =====================
 # Logging information
