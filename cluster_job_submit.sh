@@ -127,9 +127,9 @@ rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 # you execute `sbatch --array=1:100 ...` the jobs will get numbers 1 to 100
 # inclusive.
 
-cd $repo_home/Centerpoint-kitti
-ln -s ${dest_path}/lidar ./data/vod_lidar
-ln -s ${dest_path}/radar ./data/vod_radar
+cd $repo_home
+ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
+ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
 python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
 cd ./tools
 python ./tools/train.py --cfg_file ./tools/cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
