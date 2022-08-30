@@ -98,7 +98,7 @@ conda activate ${CONDA_ENV_NAME}
 echo "Moving input data to the compute node's scratch space: $SCRATCH_DISK"
 
 # input data directory path on the DFS - change line below if loc different
-repo_home=/home/${USER}/centerpoint-kitti
+repo_home=/home/${USER}/Centerpoint-kitti
 src_path=/home/${USER}/dataset/view_of_delft_PUBLIC
 
 # input data directory path on the scratch disk of the node
