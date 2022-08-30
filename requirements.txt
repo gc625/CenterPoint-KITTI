@@ -10,3 +10,5 @@ ipdb
 sklearn
 k3d
 matplotlib
+open3d
+sharedarray
