@@ -128,12 +128,6 @@ rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 # inclusive.
 
 cd $repo_home
-if [ -f "${repo_home}/data/vod_lidar" ] ; then
-    rm "${repo_home}/data/vod_lidar"
-fi
-if [ -f "${repo_home}/data//vod_radar" ] ; then
-    rm "${repo_home}/data//vod_radar"
-fi
 ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
 ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
 python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
