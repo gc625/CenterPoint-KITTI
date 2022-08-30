@@ -20,26 +20,28 @@
 # ====================
 
 # Location for stdout log - see https://slurm.schedmd.com/sbatch.html#lbAH
-SBATCH --output=/home/%u/slurm_logs/slurm-%A_%a.out
+# SBATCH --output=/home/%u/slurm_logs/slurm-%A_%a.out
 
 # Location for stderr log - see https://slurm.schedmd.com/sbatch.html#lbAH
-SBATCH --error=/home/%u/slurm_logs/slurm-%A_%a.out
+# SBATCH --error=/home/%u/slurm_logs/slurm-%A_%a.out
 
 # Maximum number of nodes to use for the job
-# #SBATCH --nodes=1
+# SBATCH --nodes=1
 
 # Generic resources to use - typically you'll want gpu:n to get n gpus
-SBATCH --gres=gpu:1
+# SBATCH --gres=gpu:1
 
 # Megabytes of RAM required. Check `cluster-status` for node configurations
-SBATCH --mem=16000
+# SBATCH --mem=16000
 
 # Number of CPUs to use. Check `cluster-status` for node configurations
-SBATCH --cpus-per-task=8
+# SBATCH --cpus-per-task=24
 
 # Maximum time for the job to run, format: days-hours:minutes:seconds
-SBATCH --time=04:00:00
+# SBATCH --time=04:00:00
 
+# Recommend setto certain node so we don't waste time copy dataset
+# SBATCH --nodelist=landonia02
 
 # =====================
 # Logging information
@@ -98,7 +100,7 @@ conda activate ${CONDA_ENV_NAME}
 echo "Moving input data to the compute node's scratch space: $SCRATCH_DISK"
 
 # input data directory path on the DFS - change line below if loc different
-repo_home=/home/${USER}/Centerpoint-kitti
+repo_home=/home/${USER}/CenterPoint-KITTI
 src_path=/home/${USER}/dataset/view_of_delft_PUBLIC
 
 # input data directory path on the scratch disk of the node
@@ -117,11 +119,6 @@ mkdir -p ${dest_path}  # make it if required
 
 rsync --archive --update --compress --progress ${src_path}/ ${dest_path}
 
-# Create softlink to scratch dataset dir
-ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
-ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
-
-
 # ==============================
 # Finally, run the experiment!
 # ==============================
@@ -130,11 +127,12 @@ ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
 # you execute `sbatch --array=1:100 ...` the jobs will get numbers 1 to 100
 # inclusive.
 
-experiment_text_file=$1
-COMMAND="`sed \"${SLURM_ARRAY_TASK_ID}q;d\" ${experiment_text_file}`"
-echo "Running provided command: ${COMMAND}"
-eval "${COMMAND}"
-echo "Command ran successfully!"
+cd $repo_home
+ln -s ${dest_path}/lidar ${repo_home}/data/vod_lidar
+ln -s ${dest_path}/radar ${repo_home}/data/vod_radar
+python -m pcdet.datasets.kitti.kitti_dataset create_kitti_infos tools/cfgs/dataset_configs/vod_radar_dataset.yaml
+cd ./tools
+python train.py --cfg_file cfgs/kitti_models/pointpillar_vod_radar.yaml --epoch 5 --workers 8 --extra_tag test --batch_size 16 --eval_save True --eval_epoch 1
 
 
 # ======================================
