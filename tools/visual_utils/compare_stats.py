@@ -1,7 +1,4 @@
-import io as sysio
-from mmap import MAP_ANON
-
-import numba
+from turtle import color
 import numpy as np
 import pickle
 from pathlib import Path as P
@@ -10,118 +7,205 @@ from pcdet.datasets.kitti.kitti_object_eval_python.eval import clean_data,_prepa
 from pcdet.datasets.kitti.kitti_object_eval_python.kitti_common import get_label_annos
 from vod.visualization.settings import label_color_palette_2d
 import matplotlib.pyplot as plt
+from matplotlib.lines import Line2D
 
 
-def draw_iou_results(iou_thresholds,
-                car_AP,
-                pedestrian_AP,
-                cyclist_AP,
-                result_dir,
-                is_distance=False,
-                fig_name=None,
-                xlabel=None):
-    fig, ax = plt.subplots(1)
 
-    car_color = label_color_palette_2d['Car']
-    ped_color = label_color_palette_2d['Pedestrian']
-    cyclist_color = label_color_palette_2d['Cyclist']
+class graph_stuff:
 
-    mAP = np.mean([car_AP,pedestrian_AP,cyclist_AP],axis=0)
-    
-    ax.scatter(iou_thresholds,car_AP,color=car_color,clip_on=False)
-    ax.scatter(iou_thresholds,pedestrian_AP,color=ped_color,clip_on=False)
-    ax.scatter(iou_thresholds,cyclist_AP,color=cyclist_color,clip_on=False)
-    ax.scatter(iou_thresholds,mAP,color='black',clip_on=False)
-    
-    ax.plot(iou_thresholds,car_AP,color=car_color,label='Car')
-    ax.plot(iou_thresholds,pedestrian_AP,color=ped_color,label='Pedestrian')
-    ax.plot(iou_thresholds,cyclist_AP,color=cyclist_color,label='Cyclist')
-    ax.plot(iou_thresholds,mAP,color='black',label='mAP')
-
-    if xlabel is not None:
-        ax.set_xlabel(xlabel) 
-    else:
-        ax.set_xlabel('IoU threshold (3D)') 
-    ax.set_ylabel('AP (3D IoU)')
-
-    ax.set_yticks(np.arange(0,110,10))
-    
-    if not is_distance:
-        ax.set_xticks(np.arange(0,1,0.1))
-    
-    ax.grid(axis = 'y')
-    
-    ax.legend()
-
-    for label in ax.get_yticklabels()[1::2]:
-        label.set_visible(False)
-        plt.xlim(xmin=0) 
-
-    plt.ylim(ymin=0,ymax=100)
-
-    if fig_name is not None:
-        fig_path = result_dir / (fig_name+'.png')
-    else:
-        fig_path = result_dir / 'iou_threshold.png'
-
-    fig.savefig(fig_path)
+    def __init__(self) -> None:
+        self.linestyle_tuple = [
+            ('solid', 'solid'),
+            ('dotted',                (0, (1, 1))),
+            ('loosely dashed',        (0, (5, 10))),
+            ('dashdotted',            (0, (3, 5, 1, 5))),
+            ('densely dashdotted',    (0, (3, 1, 1, 1))),
+            ('loosely dotted',        (0, (1, 10))),
+            ('loosely dashdotted',    (0, (3, 10, 1, 10))),
+            ('dashed',                (0, (5, 5))),
+            ('densely dotted',        (0, (1, 1))),
+            ('long dash with offset', (5, (10, 3))),
+            ('densely dashed',        (0, (5, 1))),
+            ('dashdotdotted',         (0, (3, 5, 1, 5, 1, 5))),
+            ('loosely dashdotdotted', (0, (3, 10, 1, 10, 1, 10))),
+            ('densely dashdotdotted', (0, (3, 1, 1, 1, 1, 1)))]
+        self.markers = list(Line2D.markers)
 
 
-def draw_one(x,car,ped,cyclist,tag,ax,linestyle):
-    car_color = label_color_palette_2d['Car']
-    ped_color = label_color_palette_2d['Pedestrian']
-    cyclist_color = label_color_palette_2d['Cyclist']
+def draw_one(x,car,ped,cyclist,tag,ax,linestyle,marker,draw_car,
+    draw_ped,
+    draw_cyclist,
+    draw_mAP,
+    color_modifier,
+    size):
+    car_color = list(label_color_palette_2d['Car'])
+    ped_color = list(label_color_palette_2d['Pedestrian'])
+    cyclist_color = list(label_color_palette_2d['Cyclist'])
+    mAP_color = [0,0,0]
     mAP = np.mean([car,ped,cyclist],axis=0)
-
-    ax.scatter(x,car,color=car_color,clip_on=False)
-    ax.scatter(x,ped,color=ped_color,clip_on=False)
-    ax.scatter(x,cyclist,color=cyclist_color,clip_on=False)
-    ax.scatter(x,mAP,color='black',clip_on=False)
-
-    ax.plot(x,car,color=car_color,label=f'{tag:} Car',linestyle=linestyle)
-    ax.plot(x,ped,color=ped_color,label=f'{tag:} Pedestrian',linestyle=linestyle)
-    ax.plot(x,cyclist,color=cyclist_color,label=f'{tag:} Cyclist',linestyle=linestyle)
-    ax.plot(x,mAP,color='black',label=f'{tag:} mAP',linestyle=linestyle)
-
-def compare(x,results_a,results_b,tag_a,tag_b,result_dir):
-
-
     
+
+    if draw_car:
+        car_colors = np.linspace(car_color[2],0.1,size)
+        car_color[2] = car_colors[color_modifier]
+
+        ax.plot(
+            x,
+            car,
+            color=car_color,
+            label=f'{tag}',
+            linestyle=linestyle,
+            marker=marker)
+    
+    if draw_ped:
+        ped_colors = np.linspace(ped_color[1],1,size)
+        ped_color[1] = ped_colors[color_modifier]
+        ax.plot(
+            x,
+            ped,
+            color=ped_color,
+            label=f'{tag}',
+            linestyle=linestyle,
+            marker=marker)
+
+    if draw_cyclist:
+        # cyclist_color[0] -= color_modifier
+        cyclist_colors = np.linspace(cyclist_color[0],0.1,size)
+        cyclist_color[0] = cyclist_colors[color_modifier]
+        ax.plot(
+            x,
+            cyclist,
+            color=cyclist_color,
+            label=f'{tag}',
+            linestyle=linestyle,
+            marker=marker)
+    if draw_mAP:
+        blacks = np.linspace(0,1,size)
+        mAP_color[0] = blacks[color_modifier]
+        mAP_color[1] = blacks[color_modifier]
+        mAP_color[2] = blacks[color_modifier]
+        ax.plot(x,mAP,color=mAP_color,label=f'{tag}',linestyle=linestyle,marker=marker)
+
+
+def compare_multiple(
+    x,
+    list_of_results,
+    list_of_tags,
+    result_dir,
+    draw_car,
+    draw_ped,
+    draw_cyclist,
+    draw_mAP,
+    xlabel):
+
+    # list of linestyles and markers for plotting    
+    linestyle_tuple = graph_stuff().linestyle_tuple
+    markers = graph_stuff().markers
+
+
     fig, ax = plt.subplots(1)
+    color_modifier = 0
+    for i,result in enumerate(list_of_results):
+        current_tag = list_of_tags[i]        
+        car= result['Car']['mAP_3d']
+        pedestrian = result['Pedestrian']['mAP_3d']
+        cyclist= result['Cyclist']['mAP_3d']        
+
+        # FOR EACH TAG, DRAW THE GRAPH
+        draw_one(
+            x,
+            car,
+            pedestrian,
+            cyclist,
+            current_tag,
+            ax,
+            linestyle=linestyle_tuple[i][1],
+            marker = markers[i],
+            draw_car = draw_car,
+            draw_ped = draw_ped,
+            draw_cyclist = draw_cyclist,
+            draw_mAP = draw_mAP,
+            color_modifier = color_modifier,
+            size=len(list_of_tags))
+
+        color_modifier += 1
+        
     
-    car_a = results_a['Car']['mAP_3d']
-    pedestrian_a = results_a['Pedestrian']['mAP_3d']
-    cyclist_a = results_a['Cyclist']['mAP_3d']
-
-    car_b = results_b['Car']['mAP_3d']
-    pedestrian_b = results_b['Pedestrian']['mAP_3d']
-    cyclist_b = results_b['Cyclist']['mAP_3d']
-
-    draw_one(x,car_a,pedestrian_a,cyclist_a,tag_a,ax,linestyle="solid")
-    draw_one(x,car_b,pedestrian_b,cyclist_b,tag_b,ax,linestyle="dashed")
-
     ax.grid(axis = 'y')
     plt.ylim(ymin=0,ymax=100)
+    
+    ax.set_xlabel(xlabel) 
+    ax.set_ylabel('AP (3D bounding box)')
+    
     ax.legend()
-
     box = ax.get_position()
     ax.set_position([box.x0, box.y0 - box.height * 0.01,
                  box.width, box.height * 0.9])
 
     handles, labels = plt.gca().get_legend_handles_labels()
-    order = [0,2,1]
-    plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order])
-    # ax.legend(handles, labels)                 
-    ax.legend(handles, labels, bbox_to_anchor=(-0.05, 1.05),loc='lower left',
-          fancybox=True, shadow=True, ncol=4, prop={'size': 6})
-
-    ax.set_xlabel('Distance from ego-vehicle') 
-    ax.set_ylabel('AP (3D bounding box)')
-
-    fig_path = result_dir / (f'{tag_a}_and_{tag_b}'+'.png')
     
+    # plt.legend([handles[idx] for idx in order],[labels[idx] for idx in order])
+    # ax.legend(handles, labels)                 
+    ax.legend(handles, labels, bbox_to_anchor=(0.5, 1.10),loc='lower center',
+          fancybox=True, shadow=True, ncol=len(list_of_tags), prop={'size': 8})
+
+
+    file_str =  "("
+    file_str += "Car" if draw_car else ""
+    file_str += "Ped" if draw_ped else ""
+    file_str += "Cyclist" if draw_cyclist else ""
+    file_str += "mAP" if draw_mAP else ""
+    file_str += ")"
+    
+    title_str = ""
+    title_str += "Car " if draw_car else ""
+    title_str += "Ped " if draw_ped else ""
+    title_str += "Cyclist " if draw_cyclist else ""
+    title_str += "mAP" if draw_mAP else ""
+
+    ax.set_title(f"Comparing {title_str}")
+    fig_path = result_dir / (f'{list_of_tags[0]}_and_{len(list_of_tags)-1}others{file_str}'+'.png')
     fig.savefig(fig_path)
 
+
+def load_results(list_of_tags,base_path,path_dict):
+
+    list_iou_results = []
+    list_distance_results = []
+
+    for tag in list_of_tags:
+        result_path = base_path / path_dict[tag]
+        with open(result_path / 'all_iou_results.pkl', 'rb') as f:
+            iou_results = pickle.load(f)
+        with open(result_path / 'distance_results.pkl', 'rb') as f:
+            distance_results = pickle.load(f)
+
+        list_iou_results += [iou_results]
+        list_distance_results += [distance_results]
+
+    return list_iou_results,list_distance_results
+
+
+def plot_all(iou_thresholds,
+        list_of_results,
+        list_of_tags,
+        result_dir,
+        xlabel):
+        
+        for i in range(4):
+            flag = [0,0,0,0]
+            flag[i] = 1
+
+            compare_multiple(
+            iou_thresholds,
+            list_of_results=list_of_results,
+            list_of_tags=list_of_tags,
+            result_dir=result_dir,
+            draw_car = flag[0],
+            draw_ped = flag[1],
+            draw_cyclist = flag[2],
+            draw_mAP = flag[3],
+            xlabel = xlabel)  
 
 def main():
     path_dict = {
@@ -138,43 +222,41 @@ def main():
         'CFAR_lidar':'output/IA-SSD-GAN-vod-aug-lidar/cls80_attach_xyz_only/eval/best_epoch_checkpoint'
     }
 
-    tag_a = 'CFAR_radar'
-    tag_b = 'radar_rcsv'
-    
+    # CHOSE THE RESULTS HERE:
+    # put the main result at index=0
+    list_of_tags = ['CFAR_radar','radar_rcsv','radar_rcs','radar_v','radar']
+    # list_of_tags = ['CFAR_radar','radar_rcsv']
+
+    # path stuff
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
-    result_path_a = base_path / path_dict[tag_a]
-    result_path_b = base_path / path_dict[tag_b]
-
     save_path = base_path /'output' / 'vod_vis' / 'comparisons'
-    save_path.mkdir(parents=True,exist_ok=True)
 
-    with open(result_path_a / 'all_iou_results.pkl', 'rb') as f:
-        iou_results_a = pickle.load(f)
-
-    with open(result_path_b / 'all_iou_results.pkl', 'rb') as f:
-        iou_results_b = pickle.load(f)
-
-    with open(result_path_a / 'distance_results.pkl', 'rb') as f:
-        distance_results_a = pickle.load(f)
-
-    with open(result_path_b / 'distance_results.pkl', 'rb') as f:
-        distance_results_b = pickle.load(f)
+    # load in the AP@diff_iou, AP@different_distance_ranges
+    list_iou_results,list_distance_results = load_results(list_of_tags,base_path,path_dict)
     
+    # get the x_axis labels for each type of results
+    distance_range = list_distance_results[0]['distances']
+    iou_thresholds = list_iou_results[0]['iou_thresholds']
 
-    distance_range = distance_results_a['distances']
+    compare_multiple(
+        iou_thresholds,
+        list_of_results=list_iou_results,
+        list_of_tags=list_of_tags,
+        result_dir=save_path,
+        draw_car = True,
+        draw_ped = True,
+        draw_cyclist = False,
+        draw_mAP = False,
+        xlabel = 'Distance from ego-vehicle')   
 
-    compare(
-        distance_range,
-        distance_results_a,
-        distance_results_b,
-        tag_a,
-        tag_b,
-        save_path
-        )
 
-    
-    
+    plot_all(
+        iou_thresholds,
+        list_of_results=list_iou_results,
+        list_of_tags=list_of_tags,
+        result_dir=save_path,
+        xlabel = 'Distance from ego-vehicle')       
     
     
 
