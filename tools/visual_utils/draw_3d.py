@@ -236,7 +236,7 @@ def main():
     vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
     
 
-    # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON 
+    # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
     # set_camera_position(vis_dict,'test_pos')
 
     vis_one_frame(
