@@ -4,30 +4,36 @@ import pickle
 from pathlib import Path as P
 from matplotlib.patches import Rectangle as Rec
 import numpy as np
-from pcdet.utils import calibration_kitti
+import sys
+sys.path.append("/Users/gabrielchan/Desktop/code/CenterPoint-KITTI")
+# from pcdet.utils import calibration_kitti
 from vod.visualization.settings import label_color_palette_2d
 from vod.configuration import KittiLocations
 from vod.frame import FrameDataLoader, FrameLabels, FrameTransformMatrix
+from vod.frame.transformations import transform_pcl
 import open3d as o3d
 from scipy.spatial.transform import Rotation as R
+from vod.visualization import Visualization3D
+from skimage import io
+# from vis_tools import fov_filtering
 
 
-# %%
+
+
+
+## import from visualization_2D instead
 def get_pred_dict(dt_file):
     '''
     reads results.pkl file
-
     returns dictionary with str(frame_id) as key, and list of strings, 
     where each string is a predicted box in kitti format.
     '''
     dt_annos = []
 
     # load detection dict
-    # print(dt_file)
     with open(dt_file, 'rb') as f:
         infos = pickle.load(f)
         dt_annos.extend(infos)      
-    # print(dt_annos)
     labels_dict = {}
     for j in range(len(dt_annos)):
         labels = []
@@ -51,84 +57,200 @@ def get_pred_dict(dt_file):
                 labels += [" ".join(flat)]
 
         labels_dict[frame_id] = labels
-    
-    return dt_annos, labels_dict
+    return labels_dict
 
-def vod_to_o3d(vod_bbx,frame_id,is_radar,is_test=False):
+
+def vod_to_o3d(vod_bbx,vod_calib):
+    # modality = 'radar' if is_radar else 'lidar'
+    # split = 'testing' if is_test else 'training'    
+    
+    COLOR_PALETTE = {
+        'Cyclist': (1, 0.0, 0.0),
+        'Pedestrian': (0.0, 1, 0.0),
+        'Car': (0.0, 0, 1.0),
+        'Others': (0.75, 0.75, 0.75)
+    }
 
     box_list = []
-    modality = 'radar' if is_radar else 'lidar'
-    split = 'testing' if is_test else 'training'
-    calib_path = "../../data/vod_%s/%s/calib/%s.txt"%(modality, split, frame_id)
-    calib = calibration_kitti.Calibration(calib_path)
-
     for box in vod_bbx:
-        xyz = np.array([[box['x'],box['y'],box['z']]])
-        loc_lidar = calib.rect_to_lidar(xyz)
-        new_xyz = loc_lidar[0]
         
-        angle = -(box['rotation']+ np.pi / 2) 
-        angle = np.array([0, 0, angle])
-        rot_matrix = R.from_euler('XYZ', angle).as_matrix()
+        # Conver to lidar_frame 
+        # NOTE: O3d is stupid and plots the center of the box differently,
+        offset = -(box['h']/2) 
+        old_xyz = np.array([[box['x'],box['y']+offset,box['z']]])
+        xyz = transform_pcl(old_xyz,vod_calib.t_lidar_camera)[0,:3] #convert frame
         extent = np.array([[box['l'],box['w'],box['h']]])
-
-        obbx = o3d.geometry.OrientedBoundingBox(new_xyz.T, rot_matrix, extent.T)
-
+        
+        # ROTATION MATRIX
+        rot = -(box['rotation']+ np.pi / 2) 
+        angle = np.array([0, 0, rot])
+        rot_matrix = R.from_euler('XYZ', angle).as_matrix()
+        
+        # CREATE O3D OBJECT
+        obbx = o3d.geometry.OrientedBoundingBox(xyz, rot_matrix, extent.T)
+        obbx.color = COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) # COLOR
+        
         box_list += [obbx]
 
-    return obbx
+    return box_list
 
-def process_dt(pred_dict,vod_data_path,frame_id,is_radar):
-    frame_ids = list(pred_dict.keys())
+
+
+
+def get_kitti_locations(vod_data_path):
     kitti_locations = KittiLocations(root_dir=vod_data_path,
                                 output_dir="output/",
                                 frame_set_path="",
                                 pred_dir="",
                                 )
+    return kitti_locations
+                             
+
+
+def get_visualization_data(kitti_locations,dt_path,frame_id):
+
+    pred_dict = get_pred_dict(dt_path)
+    frame_ids = list(pred_dict.keys())
     frame_data = FrameDataLoader(kitti_locations,
                              frame_ids[frame_id],pred_dict)
+    vod_calib = FrameTransformMatrix(frame_data)
 
+
+    # get pcd
     radar_points = frame_data.radar_data
-    lidar_points = frame_data.lidar_data
+    radar_points = transform_pcl(radar_points,vod_calib.t_lidar_radar)
+    lidar_points = frame_data.lidar_data 
+    
+    # convert into o3d pointcloud object
+    radar_pcd = o3d.geometry.PointCloud()
+    radar_pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
+    radar_colors = np.ones_like(lidar_points[:,0:3])
+    radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
+    
+    lidar_pcd = o3d.geometry.PointCloud()
+    lidar_pcd.points = o3d.utility.Vector3dVector(lidar_points[:,0:3])
+    lidar_colors = np.ones_like(lidar_points[:,0:3])
+    lidar_pcd.colors = o3d.utility.Vector3dVector(lidar_colors)
 
+    # GET BOXES IN VOD FORMAT
     vod_preds = FrameLabels(frame_data.get_predictions()).labels_dict
     vod_labels = FrameLabels(frame_data.get_labels()).labels_dict
 
-    o3d_predictions = vod_to_o3d(vod_preds,frame_ids[frame_id],is_radar)
-    o3d_labels = vod_to_o3d(vod_labels,frame_ids[frame_id],is_radar)
+    # CONVERT TO O3D GEOMETRY OBJECT
+    o3d_predictions = vod_to_o3d(vod_preds,vod_calib)
+    o3d_labels = vod_to_o3d(vod_labels,vod_calib)
 
-    return radar_points,lidar_points,o3d_predictions,o3d_labels
+    vis_dict = {
+        'radar_pcd': [radar_pcd],
+        'lidar_pcd': [lidar_pcd],
+        'o3d_predictions': o3d_predictions,
+        'o3d_labels': o3d_labels
+    }
+    return vis_dict
+
+
+
+def set_camera_position(vis_dict,output_name):
+
+
+    geometries = []
+    geometries += vis_dict['radar_pcd']
+    geometries += vis_dict['o3d_labels']
+
+    vis = o3d.visualization.Visualizer()
+    vis.create_window()    
+    for g in geometries:
+        vis.add_geometry(g)
+    opt = vis.get_render_option()
+    opt.background_color = np.asarray([0, 0, 0])
+    vis.run()  # user changes the view and press "q" to terminate
+    param = vis.get_view_control().convert_to_pinhole_camera_parameters()
+
+    o3d.io.write_pinhole_camera_parameters(f'{output_name}.json', param)
+    vis.destroy_window()
+
+def vis_one_frame(
+    vis_dict,
+    camera_pos_file,
+    output_name,
+    plot_radar_pcd=False,
+    plot_lidar_pcd=True,
+    plot_labels=True,
+    plot_predictions=False):
+
+    
+    geometries = []
+
+    if plot_radar_pcd:
+        geometries += vis_dict['radar_pcd']
+        point_size = 3
+    if plot_lidar_pcd:
+        geometries += vis_dict['lidar_pcd']
+        point_size = 1 
+    if plot_labels:
+        geometries += vis_dict['o3d_labels']
+    if plot_predictions:
+        geometries += vis_dict['o3d_predictions']
+
+    
+    viewer = o3d.visualization.Visualizer()
+    viewer.create_window()
+    # DRAW STUFF
+    for geometry in geometries:
+        viewer.add_geometry(geometry)
+    
+    # POINT SETTINGS
+    opt = viewer.get_render_option()
+    opt.point_size = point_size
+    
+    # BACKGROUND COLOR
+    opt.background_color = np.asarray([0, 0, 0])
+
+    # SET CAMERA POSITION
+    ctr = viewer.get_view_control()
+    parameters = o3d.io.read_pinhole_camera_parameters(camera_pos_file)    
+    ctr.convert_from_pinhole_camera_parameters(parameters)
+    
+    # viewer.run()
+    viewer.capture_screen_image(f"{output_name}.png")
+    viewer.destroy_window()
 
 # %%
 def main():
+    '''
+    NOTE: EVERYTHING IS PLOTTED IN THE LIDAR FRAME 
+    i.e. radar,lidar,gt,pred boxes all in lidar coordinate frame 
+    '''
 
-    root_path = P('/root/gabriel/code/parent/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint')
-    dt_path = str(root_path / 'result.pkl')
-    dt_annos, pred_dict = get_pred_dict(dt_path)
+    vod_data_path = '/Users/gabrielchan/Desktop/data/view_of_delft_PUBLIC'
+    
+    #------------------------------------SETTINGS------------------------------------
+    frame_id = 333
+    detection_result_path = P('/Users/gabrielchan/Desktop/data/pcdet')
+    dt_path = str(detection_result_path / 'result.pkl')
+    CAMERA_POS_PATH = 'camera_position.json'
+    OUTPUT_IMG_PATH = 'output'
+    #--------------------------------------------------------------------------------
 
-    # gt_path = str(root_path / 'radar_preds.pkl')
-    # print(pred_dict)
-    vod_data_path = '/mnt/12T/public/view_of_delft'
-    radar_points,lidar_points,o3d_predictions,o3d_labels = process_dt(
-                                                                pred_dict,
-                                                                vod_data_path,
-                                                                333,
-                                                                is_radar=True)
+    kitti_locations = get_kitti_locations(vod_data_path)
+    vis_dict = get_visualization_data(kitti_locations,dt_path,frame_id)
     
 
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
-    o3d.visualization.draw_geometries([pcd])
-    o3d.visualization.draw_geometries([o3d_labels])
+    # UNCOMMENT THIS TO CREATE A CAMERA SETTING JSON,  
+    # set_camera_position(vis_dict,'test_pos')
 
-    o3d.io.write_point_cloud("test.pcd", pcd)
-    
-    
-
-    
+    vis_one_frame(
+        vis_dict = vis_dict,
+        camera_pos_file=CAMERA_POS_PATH,
+        output_name=f'{OUTPUT_IMG_PATH}/{frame_id}_vis',
+        plot_radar_pcd=False,
+        plot_lidar_pcd=True,
+        plot_labels=True,
+        plot_predictions=False)
 
 
 #%%
 if __name__ == "__main__":
     main()
+
 # %%
