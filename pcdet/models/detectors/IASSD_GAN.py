@@ -184,7 +184,7 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             num_point_features = model_info_dict['num_point_features'] # ====> this was changed by backbone3d
 
-        feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
+        # feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
 
         # model_info_dict['num_point_features'] =====> change this for detection head
 

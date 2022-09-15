@@ -230,18 +230,12 @@ def main():
         '3dssd_lidar': 'output/3DSSD_vod_lidar/all_cls/eval/checkpoint_epoch_80',
     }
 
-<<<<<<< Updated upstream
     # CHOSE THE RESULTS HERE:
     # put the main result at index=0
     list_of_tags = ['CFAR_radar','radar_rcsv','radar_rcs','radar_v','radar']
     # list_of_tags = ['CFAR_radar','radar_rcsv']
 
     # path stuff
-=======
-    tag_a = 'CFAR_lidar_rcsv'
-    tag_b = 'lidar_i'
-    
->>>>>>> Stashed changes
     abs_path = P(__file__).parent.resolve()
     base_path = abs_path.parents[1]
     save_path = base_path /'output' / 'vod_vis' / 'comparisons'
