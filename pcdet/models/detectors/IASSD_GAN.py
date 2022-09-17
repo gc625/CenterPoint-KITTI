@@ -548,7 +548,7 @@ class IASSD_GAN(Detector3DTemplate):
 
 
             tb_dict.update(new_tb_dict)
-            loss = loss_point + loss_match
+            loss = (2/3) * loss_point + (1/3) * loss_match
             return loss, tb_dict, disp_dict
         
 
