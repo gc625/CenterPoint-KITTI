@@ -268,7 +268,10 @@ def make_vid(imgs, vid_fname, fps=15):
     print('=================== making videos ===================')
     out = None
     for fname in tqdm(imgs):
-        i = cv2.imread(fname)
+        try:
+            i = cv2.imread(fname)
+        except:
+            i = cv2.imread(str(fname))
         if out is None:
             h, w, _ = i.shape
             size = (w, h)

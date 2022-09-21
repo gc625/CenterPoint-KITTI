@@ -2,7 +2,7 @@ from matplotlib import pyplot as plt
 
 from vod.frame import FrameDataLoader, FrameTransformMatrix, FrameLabels, project_pcl_to_image, min_max_filter
 
-from .helpers import plot_boxes, get_2d_label_corners
+from .helpers import plot_boxes, get_2d_label_corners, plot_legends
 from .settings import label_color_palette_2d
 
 
@@ -27,6 +27,10 @@ Constructor of the class, which loads the required frame properties, and creates
 
         self.image_copy = self.frame_data_loader.image
 
+    def plot_vis_legend(self):
+        plot_legends(self.classes_visualized, label_color_palette_2d)
+        
+
     def plot_gt_labels(self, max_distance_threshold):
         """
 This method plots the ground truth labels on the frame.
@@ -45,6 +49,8 @@ This method plots the ground truth labels on the frame.
         labels = [d['corners'] for d in filtered]
 
         plot_boxes(labels, colors,is_gt=True)
+        # plot_legend(self.classes_visualized, label_color_palette_2d)
+
 
     def plot_predictions(self, score_threshold, max_distance_threshold):
         """
@@ -130,7 +136,7 @@ This method can be called to draw the frame with the required information.
         :param score_threshold: Minimum score for objects to be plotted.
         """
         fig = plt.figure(figsize=(12, 8))
-        fig.set_dpi(150)
+        fig.set_dpi(200)
 
         plt.clf()
 
@@ -148,7 +154,7 @@ This method can be called to draw the frame with the required information.
         if show_radar:
             self.plot_radar_pcl(max_distance_threshold=max_distance_threshold,
                                 min_distance_threshold=min_distance_threshold)
-
+        self.plot_vis_legend()
         plt.imshow(self.image_copy, alpha=1)
         plt.axis('off')
 

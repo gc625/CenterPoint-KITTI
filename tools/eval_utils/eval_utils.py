@@ -343,6 +343,25 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
         )
 
     logger.info('*************** Evaluation Summary of EPOCH %s *****************' % epoch_id)
+    
+    # log_kitti_result(eval_results, logger, ret_dict)
+    current_epoch_mAP_3d = log_vod_result(eval_results, logger, ret_dict)
+    # save gt, prediction, final points origin, final points new coordinate
+    
+    if save_best_eval and current_epoch_mAP_3d > best_mAP_3d:
+        logger.info('>>>>>> Saving best mAP_3d model save to %s <<<<<<' % result_dir)
+        ckpt_name = best_model_output_dir / 'best_epoch_checkpoint'
+        save_checkpoint(
+            checkpoint_state(model, None, epoch_id, None), filename=ckpt_name,
+        )
+        logger.info('>>>>>>> current best mAP_3d result is: <<<<<<<')
+        log_vod_result(eval_results, logger, ret_dict)
+    
+
+    logger.info('****************Evaluation done.*****************')
+    return ret_dict
+
+def log_kitti_result(eval_results, logger, ret_dict):
     logger.info('*************   kitti official evaluation script   *************')
     kitti_evaluation_result = eval_results['kitti_eval']
     logger.info("Results: \n"
@@ -351,38 +370,30 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
                 f"Pedestrian: {kitti_evaluation_result['entire_area']['Pedestrian_3d_all']} \n"
                 f"Cyclist: {kitti_evaluation_result['entire_area']['Cyclist_3d_all']} \n"
                 f"mAP: {(kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3}")
+    ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
+
+def log_vod_result(eval_results, logger, ret_dict):
     logger.info('*************   vod official evaluation script   *************')
     vod_evaluation_result = eval_results['vod_eval']
     logger.info("Results: \n"
-          f"Entire annotated area: \n"
-          f"Car: {vod_evaluation_result['entire_area']['Car_3d_all']} \n"
-          f"Pedestrian: {vod_evaluation_result['entire_area']['Pedestrian_3d_all']} \n"
-          f"Cyclist: {vod_evaluation_result['entire_area']['Cyclist_3d_all']} \n"
-          f"mAP: {(vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3} \n"
-          f"Driving corridor area: \n"
-          f"Car: {vod_evaluation_result['roi']['Car_3d_all']} \n"
-          f"Pedestrian: {vod_evaluation_result['roi']['Pedestrian_3d_all']} \n"
-          f"Cyclist: {vod_evaluation_result['roi']['Cyclist_3d_all']} \n"
-          f"mAP: {(vod_evaluation_result['roi']['Car_3d_all'] + vod_evaluation_result['roi']['Pedestrian_3d_all'] + vod_evaluation_result['roi']['Cyclist_3d_all']) / 3} \n"
-          )
+        f"Entire annotated area: \n"
+        f"Car: {vod_evaluation_result['entire_area']['Car_3d_all']} \n"
+        f"Pedestrian: {vod_evaluation_result['entire_area']['Pedestrian_3d_all']} \n"
+        f"Cyclist: {vod_evaluation_result['entire_area']['Cyclist_3d_all']} \n"
+        f"mAP: {(vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3} \n"
+        f"Driving corridor area: \n"
+        f"Car: {vod_evaluation_result['roi']['Car_3d_all']} \n"
+        f"Pedestrian: {vod_evaluation_result['roi']['Pedestrian_3d_all']} \n"
+        f"Cyclist: {vod_evaluation_result['roi']['Cyclist_3d_all']} \n"
+        f"mAP: {(vod_evaluation_result['roi']['Car_3d_all'] + vod_evaluation_result['roi']['Pedestrian_3d_all'] + vod_evaluation_result['roi']['Cyclist_3d_all']) / 3} \n"
+        )
 
 
     current_epoch_mAP_3d = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
     ret_dict['mAP_3d'] = current_epoch_mAP_3d
-    ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
+    
     ret_dict['mAP_3d_vod'] = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
-    # save gt, prediction, final points origin, final points new coordinate
-
-    if save_best_eval and current_epoch_mAP_3d > best_mAP_3d:
-        logger.info('>>>>>> Saving best mAP_3d model save to %s <<<<<<' % result_dir)
-        ckpt_name = best_model_output_dir / 'best_epoch_checkpoint'
-        save_checkpoint(
-            checkpoint_state(model, None, epoch_id, None), filename=ckpt_name,
-        )
-
-    logger.info('****************Evaluation done.*****************')
-    return ret_dict
-
+    return current_epoch_mAP_3d
 
 def model_state_to_cpu(model_state):
     model_state_cpu = type(model_state)()  # ordered dict
