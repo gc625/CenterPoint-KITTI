@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from time import time
 import numpy as np
-from pointnet2 import pointnet2_utils
+from . import pointnet2_utils
 
 LEAKY_RATE = 0.1
 use_bn = False
