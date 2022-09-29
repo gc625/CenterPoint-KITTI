@@ -608,8 +608,11 @@ class IASSD_Head(PointHeadTemplate):
         one_hot_targets = one_hot_targets[..., 1:]
         
         if self.model_cfg.LOSS_CONFIG.CENTERNESS_REGULARIZATION:
-            # centerness_mask = self.generate_center_ness_mask()
-            # one_hot_targets = one_hot_targets * centerness_mask.unsqueeze(-1).repeat(1, one_hot_targets.shape[1])
+            if self.model_cfg.LOSS_CONFIG.get('IGNORE_CENTERNESS', False):
+                pass
+            else:
+                centerness_mask = self.generate_center_ness_mask()
+                one_hot_targets = one_hot_targets * centerness_mask.unsqueeze(-1).repeat(1, one_hot_targets.shape[1])
             pass
 
         point_loss_cls = self.cls_loss_func(point_cls_preds, one_hot_targets, weights=cls_weights).mean(dim=-1).sum()

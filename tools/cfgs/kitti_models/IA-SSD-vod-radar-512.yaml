@@ -10,8 +10,8 @@ DATA_CONFIG:
 
         -   NAME: sample_points
             NUM_POINTS: {
-                'train': 768, # using waymo config
-                'test': 768
+                'train': 512, # using waymo config
+                'test': 512
             }
 
         -   NAME: shuffle_points
@@ -38,7 +38,7 @@ MODEL:
         NAME: IASSD_Backbone
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[1024], [1024], [384], [128], [-1], [128]]
+            NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
@@ -100,7 +100,6 @@ MODEL:
             CORNER_LOSS_REGULARIZATION: True
             CENTERNESS_REGULARIZATION: True
             CENTERNESS_REGULARIZATION_SA: True
-            IGNORE_CENTERNESS: True
             LOSS_WEIGHTS: {
                 'ins_aware_weight': [0, 1.0, 1.0],
                 'vote_weight': 1.0,
