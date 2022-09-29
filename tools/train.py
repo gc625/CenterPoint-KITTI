@@ -129,8 +129,8 @@ def main():
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
     if args.multi_gpu:
         num_of_gpus = torch.cuda.device_count()
-        gpu_list = list(range(num_of_gpus))
-        model = nn.DataParallel(model, device=num_of_gpus)
+        device_list = list(range(num_of_gpus))
+        model = nn.DataParallel(model, device_ids=device_list)
     else:
         model.cuda()
     
