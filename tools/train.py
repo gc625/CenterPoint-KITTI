@@ -48,6 +48,7 @@ def parse_config():
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
     parser.add_argument('--eval_epoch', type=int, default=1, help='number of epoch for eval once')
     parser.add_argument('--eval_save', type=bool, default=True, help='save best eval model during training')
+    parser.add_argument('--multi_gpu', type=bool, default=False, help='whether to use multiple gpu for training')
 
     args = parser.parse_args()
     print(args.freeze_part)
@@ -126,7 +127,12 @@ def main():
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set, tb_log=tb_log)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    model.cuda()
+    if args.multi_gpu:
+        num_of_gpus = torch.cuda.device_count()
+        gpu_list = list(range(num_of_gpus))
+        model = nn.DataParallel(model, device=num_of_gpus)
+    else:
+        model.cuda()
     
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
     torch.autograd.set_detect_anomaly(True)
