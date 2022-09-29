@@ -10,8 +10,8 @@ DATA_CONFIG:
 
         -   NAME: sample_points
             NUM_POINTS: {
-                'train': 768,
-                'test': 768
+                'train': 512,
+                'test': 512
             }
         -   NAME: sample_attach_points
             NUM_POINTS: {
@@ -24,8 +24,8 @@ DATA_CONFIG:
                 'test': False
             }
 
-USE_ATTACH: True
-# FREEZE_MODE: head
+USE_ATTACH: False
+FREEZE_MODE: backbone
 MODEL:
     DEBUG: False
     NAME: IASSDGAN
@@ -72,7 +72,7 @@ MODEL:
         # ========================================
         SA_CONFIG:
             # Sampling setting:
-            NPOINT_LIST: [[768], [768], [384], [128], [-1], [128]]
+            NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
             # Group and Abstraction setting:
@@ -114,7 +114,7 @@ MODEL:
         #     MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
 
 
-    USE_FEAT_AUG: True
+    USE_FEAT_AUG: False
     # FEAT_AUG: 
     #     NAME: MLP_AUG
     FEAT_AUG:
@@ -240,7 +240,7 @@ MODEL:
 
 OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 8
-    NUM_EPOCHS: 30
+    NUM_EPOCHS: 80
 
     OPTIMIZER: adam_onecycle
     # try to lower the LR for fine-tuning, 

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import yaml
 from easydict import EasyDict
-
+import os
 from pathlib import Path as P
 abs_path = P(__file__).parent.resolve()
 base_path = abs_path.parents[0]
@@ -81,6 +81,10 @@ def merge_new_config(config, new_config):
 
 
 def cfg_from_yaml_file(cfg_file, config):
+    if os.path.exists(cfg_file):
+        pass
+    else:
+        cfg_file = base_path / 'tools'/cfg_file
     with open(cfg_file, 'r') as f:
         try:
             new_config = yaml.load(f, Loader=yaml.FullLoader)
