@@ -184,6 +184,9 @@ def main():
     if cfg.get('USE_ATTACH', False):
         model.freeze_attach(logger)
         
+    freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
+    # all attribute related operation should be perform before parallel wrapper
+
     if dist_train:
         model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
@@ -230,7 +233,8 @@ def main():
         logger=logger,
         eval_epoch=args.eval_epoch,
         eval_output_dir=eval_output_dir,
-        save_best_eval=args.eval_save
+        save_best_eval=args.eval_save,
+        freeze_mode=freeze_mode
     )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
