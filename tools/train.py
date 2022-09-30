@@ -103,6 +103,7 @@ def main():
     logger.info('CUDA_VISIBLE_DEVICES=%s' % gpu_list)
 
     if dist_train:
+        logger.info('visble GPUs count: %d' % total_gpus)
         logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
     for key, val in vars(args).items():
         logger.info('{:16} {}'.format(key, val))
@@ -190,6 +191,7 @@ def main():
     if dist_train:
         logger.info('distributed training')
         logger.info('cfg.LOCAL_RANK = ', cfg.LOCAL_RANK)
+        logger.info('device count %d ' % torch.cuda.device_count())
         logger.info([cfg.LOCAL_RANK % torch.cuda.device_count()])
         model = nn.parallel.DistributedDataParallel(model, device_ids=list(range(torch.cuda.device_count())))
     logger.info(model)
