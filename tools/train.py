@@ -6,6 +6,7 @@ import os
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
+from re import S
 from test import repeat_eval_ckpt, eval_single_ckpt
 # from eval_utils import eval_utils
 import torch
@@ -72,7 +73,6 @@ def main():
             args.tcp_port, args.local_rank, backend='nccl'
         )
         dist_train = True
-
     if args.batch_size is None:
         args.batch_size = cfg.OPTIMIZATION.BATCH_SIZE_PER_GPU
     else:
@@ -188,6 +188,8 @@ def main():
     # all attribute related operation should be perform before parallel wrapper
 
     if dist_train:
+        logger.info('distributed training')
+        logger.info([cfg.LOCAL_RANK % torch.cuda.device_count()])
         model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
 
