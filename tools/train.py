@@ -193,7 +193,7 @@ def main():
         logger.info('cfg.LOCAL_RANK = ', cfg.LOCAL_RANK)
         logger.info('device count %d ' % torch.cuda.device_count())
         logger.info([cfg.LOCAL_RANK % torch.cuda.device_count()])
-        model = nn.parallel.DistributedDataParallel(model, device_ids=list(range(torch.cuda.device_count())))
+        model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
 
     lr_scheduler, lr_warmup_scheduler = build_scheduler(
