@@ -904,7 +904,8 @@ class FeatureAug(nn.Module):
                 raise RuntimeError('Nan occurs in domain cross over!')
         
             shared_lidar = self.lidar_shared_mlp(lidar_feat) # [B, C, N]
-
+        # import ipdb 
+        # ipdb.set_trace()
         if self.training or self.debug:
             self.forward_dict['batch_size'] = batch_dict['batch_size']
             self.forward_dict['lidar_original'] = lidar_feat
@@ -915,8 +916,8 @@ class FeatureAug(nn.Module):
             self.forward_dict['radar_xyz'] = radar_xyz
             self.forward_dict['lidar_centers'] = attach_dict['centers']
             self.forward_dict['radar_centers'] = batch_dict['centers']
-            self.forward_dict['radar_centers_origin'] = attach_dict['centers_origin']
-            self.forward_dict['lidar_centers_origin'] = batch_dict['centers_origin']
+            self.forward_dict['lidar_centers_origin'] = attach_dict['centers_origin']
+            self.forward_dict['radar_centers_origin'] = batch_dict['centers_origin']
 
             batch_dict['radar_shared'] = shared_radar
         # cat augmented feature to the original feature 'centers_features'
@@ -953,12 +954,14 @@ class FeatureAug(nn.Module):
         _, lidar_origin, _ = self.break_up_pc(self.forward_dict['lidar_centers_origin'])
 
         _, radar_origin, _ = self.break_up_pc(self.forward_dict['radar_centers_origin'])
+        lidar_origin = lidar_origin.view(batch_size, -1, 3)
+        radar_origin = radar_origin.view(batch_size, -1, 3)
 
         if self.use_centroid:
             lidar_xyz = lidar_center
             radar_xyz = radar_center    
         else:
-            lidar_xyz = lidar_origin
+            lidar_xyz = lidar_origin        
             radar_xyz = radar_origin
         # rec_lidar_loss = nn.functional.mse_loss(lidar_original, lidar_recover, reduction='mean')
         # rec_radar_loss = nn.functional.mse_loss(radar_original, radar_recover, reduction='mean')
@@ -966,6 +969,8 @@ class FeatureAug(nn.Module):
         # rec_loss = (rec_lidar_loss + rec_radar_loss)/2
         
         # matching loss
+        # import ipdb
+        # ipdb.set_trace()
         self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
         cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should get the one and only result
         mask = mask.unsqueeze(-1).unsqueeze(-1)

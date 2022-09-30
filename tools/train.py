@@ -127,12 +127,8 @@ def main():
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set, tb_log=tb_log)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
-    if args.multi_gpu:
-        num_of_gpus = torch.cuda.device_count()
-        device_list = list(range(num_of_gpus))
-        model = nn.DataParallel(model, device_ids=device_list)
-    else:
-        model.cuda()
+    
+    model.cuda()
     
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
     torch.autograd.set_detect_anomaly(True)
