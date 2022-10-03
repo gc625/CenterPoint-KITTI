@@ -156,7 +156,7 @@ MODEL:
             # Ref: 'WeightedBinaryCrossEntropy', 'WeightedCrossEntropy', 'FocalLoss'
             LOSS_CLS: WeightedCrossEntropy
             LOSS_REG: WeightedSmoothL1Loss
-            LOSS_INS: WeightedCrossEntropy
+            LOSS_INS: FocalLoss
             SAMPLE_METHOD_LIST: *sample_method_list
             LOSS_VOTE_TYPE: 'none'  #'none', 'ver1', 'ver2', 
 
@@ -206,7 +206,7 @@ MODEL:
                 # Ref: 'WeightedBinaryCrossEntropy', 'WeightedCrossEntropy', 'FocalLoss'
                 LOSS_CLS: WeightedCrossEntropy
                 LOSS_REG: WeightedSmoothL1Loss
-                LOSS_INS: WeightedCrossEntropy
+                LOSS_INS: FocalLoss
                 SAMPLE_METHOD_LIST: *sample_method_list
                 LOSS_VOTE_TYPE: 'none'  #'none', 'ver1', 'ver2', 
 
@@ -246,7 +246,7 @@ OPTIMIZATION:
     # try to lower the LR for fine-tuning, 
     # we should obtain the best performance within 20 epoches
     # If we want to train from scratch, increase the LR together with the LR_DECAY
-    LR: 0.005
+    LR: 0.001
     WEIGHT_DECAY: 0.01
     MOMENTUM: 0.9
 
