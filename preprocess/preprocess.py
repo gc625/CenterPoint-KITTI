@@ -1,52 +1,28 @@
 # Modify converty kitti format to real kitti format
 import glob
 import os
-
-def _createlinks(imageset,output_dir,root):
-    lidar_files = root + '/lidar_subset'
-    label_files = root + '/label_2'
-
-    lidar_output = output_dir + '/velodyne'
-    label_output = output_dir + '/label_2'
-
-    with open(imageset,'r') as f:
-        list_files = f.read().splitlines()
-
-
-    for file in list_files: 
-        lidar_tgt = file+'.bin'
-        label_tgt = file+'.txt'
-    
-        assert os.path.isfile(
-            os.path.join(lidar_files,lidar_tgt)
-        ), f'LIDAR FILE MISSING {lidar_tgt}'
-        assert os.path.isfile(
-            os.path.join(label_files,label_tgt)
-        ), f'label FILE MISSING {label_tgt}'
-
-
-        os.symlink(
-            os.path.join(lidar_files,lidar_tgt),
-            os.path.join(lidar_output,lidar_tgt)
-        )
-        
-        os.symlink(
-            os.path.join(label_files,label_tgt),
-            os.path.join(label_output,label_tgt)
-        )
-
-    assert(len(glob.glob(lidar_files)) == len(glob.glob(lidar_output))), 'lidar doesnt match'
-    assert(len(glob.glob(label_files)) == len(glob.glob(label_output))), 'labels doesnt match'
+from tabnanny import check
+from typing import no_type_check
 
 def write_split_file(path, timestamps):
     with open(path, 'w') as f:
         f.writelines(ts.split('.')[0] + '\n' for ts in timestamps)
+
+def check_if_empty_label(label_path):
+    with open(label_path, 'r') as f:
+        lines = f.readlines()
+    if len(lines) == 0:
+        return True
+    return False
 
 def create_label_link(source_path, inhouse_source_path, target_path, test_set_imageset, train_set_imageset, val_set_imageset):
     source_label_path = os.path.join(source_path, 'label')
     target_label_path = os.path.join(target_path,'training', 'label_2')
     if not os.path.exists(target_label_path):
         os.makedirs(target_label_path)
+
+    no_found = 0
+    empty = 0
 
     test_label_seq = []
     with open(test_set_imageset,'r') as f:
@@ -56,8 +32,14 @@ def create_label_link(source_path, inhouse_source_path, target_path, test_set_im
 
         if not os.path.isfile(os.path.join(inhouse_source_path,label_tgt)):
             print(f'[TEST]: not found {label_tgt}, using shangqi gt')
+            no_found += 1
             continue
         
+        if check_if_empty_label(os.path.join(inhouse_source_path,label_tgt)):
+            print(f'[TEST]: {label_tgt} is empty, using shangqi gt')
+            empty += 1
+            continue
+
         os.symlink(
             os.path.join(inhouse_source_path,label_tgt),
             os.path.join(target_label_path,label_tgt)
@@ -70,8 +52,15 @@ def create_label_link(source_path, inhouse_source_path, target_path, test_set_im
         train_labels_files = f.read().splitlines()
     for file in train_labels_files:
         label_tgt = file+'.txt'
+
         if not os.path.isfile(os.path.join(source_label_path,label_tgt)):
             print(f'[TRAIN]: not found {label_tgt}, skip')
+            no_found += 1
+            continue
+
+        if check_if_empty_label(os.path.join(source_label_path,label_tgt)):
+            print(f'[TRAIN]: {label_tgt} is empty, skip')
+            empty += 1
             continue
         
         os.symlink(
@@ -85,8 +74,15 @@ def create_label_link(source_path, inhouse_source_path, target_path, test_set_im
         val_labels_files = f.read().splitlines()
     for file in val_labels_files:
         label_tgt = file+'.txt'
+
         if not os.path.isfile(os.path.join(source_label_path,label_tgt)):
             print(f'[VAL]: not found {label_tgt}, skip')
+            no_found += 1
+            continue
+
+        if check_if_empty_label(os.path.join(source_label_path,label_tgt)):
+            print(f'[VAL]: {label_tgt} is empty, skip')
+            empty += 1
             continue
         
         os.symlink(
@@ -96,6 +92,8 @@ def create_label_link(source_path, inhouse_source_path, target_path, test_set_im
         val_label_seq.append(label_tgt)
     
     print('Found valid labels: ', len(train_label_seq), len(val_label_seq), len(test_label_seq))
+    print('Not found labels: ', no_found)
+    print('Empty labels: ', empty)
     return train_label_seq, val_label_seq, test_label_seq
     
 
