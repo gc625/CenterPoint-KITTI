@@ -1,136 +1,205 @@
-import argparse
+# Modify converty kitti format to real kitti format
 import glob
-import shutil
 import os
-from pathlib import Path
-import lxml.etree
-import read_raw, extract_gt, pcl_sync, copy_lidar, partition, vis_pcl, filter_radar_label
 
-def _purge(paths):
-    for path in paths:
-        if os.path.exists(path):
-            shutil.rmtree(path)
-            print(f'deleted "{path}"')
+def _createlinks(imageset,output_dir,root):
+    lidar_files = root + '/lidar_subset'
+    label_files = root + '/label_2'
 
-def _get_data_dirs(root, assume_yes=False):
-    options = os.listdir(root)
-    dirs = []
-    for option in options:
-        path = os.path.join(root, option)
-        if os.path.isdir(path):
-            dirs.append(path)
-    if len(dirs) == 0:
-        raise ValueError('No top-level directories found')
-    print(f'Found {len(dirs)} potential data directories:')
-    for i, dir in enumerate(dirs):
-        print(f'\t{i + 1}.\t {dir}')
-    if not assume_yes:
-        ans = input('Is this the correct set of directories containing data? [y/n] ')
-        if ans.lower() != 'y':
-            raise ValueError('Preprocessing stopped. Answer "y"/"Y" next time.')
-    _validate_timestamps(dirs)
-    return dirs
+    lidar_output = output_dir + '/velodyne'
+    label_output = output_dir + '/label_2'
 
-def _validate_timestamps(dirs):
-    timestamps = set()
-    for dir in dirs:
-        dname = Path(dir).name
-        lidar_paths = os.path.join(dir, 'input', 'lidar', f'{dname}_C', '*.pcd')
-        for lidar_path in glob.glob(lidar_paths):
-            lidar_ts = Path(lidar_path).stem
-            if lidar_ts in timestamps:
-                raise ValueError(f'timestamp {lidar_ts} already encountered')
-            timestamps.add(lidar_ts)
-    print(f'Directories contain {len(timestamps)} unique lidar timestamps.')
+    with open(imageset,'r') as f:
+        list_files = f.read().splitlines()
 
-def _get_base_timestamps(dir):
-    """Extract the base timestamps needed for following steps from {dir}/meta.xml
-    returns: 
-        utc (for lidar and robosense), 
-        local (for radar and pose)
-    """
-    metafile = os.path.join(dir, 'meta.xml')
-    root = lxml.etree.parse(metafile).getroot()
-    return {
-        'utc': round(float(root.attrib['start_posix_utc'])),
-        'local': round(float(root.attrib['start_posix_local']))
-    }
+
+    for file in list_files: 
+        lidar_tgt = file+'.bin'
+        label_tgt = file+'.txt'
+    
+        assert os.path.isfile(
+            os.path.join(lidar_files,lidar_tgt)
+        ), f'LIDAR FILE MISSING {lidar_tgt}'
+        assert os.path.isfile(
+            os.path.join(label_files,label_tgt)
+        ), f'label FILE MISSING {label_tgt}'
+
+
+        os.symlink(
+            os.path.join(lidar_files,lidar_tgt),
+            os.path.join(lidar_output,lidar_tgt)
+        )
+        
+        os.symlink(
+            os.path.join(label_files,label_tgt),
+            os.path.join(label_output,label_tgt)
+        )
+
+    assert(len(glob.glob(lidar_files)) == len(glob.glob(lidar_output))), 'lidar doesnt match'
+    assert(len(glob.glob(label_files)) == len(glob.glob(label_output))), 'labels doesnt match'
+
+def write_split_file(path, timestamps):
+    with open(path, 'w') as f:
+        f.writelines(ts.split('.')[0] + '\n' for ts in timestamps)
+
+def create_label_link(source_path, inhouse_source_path, target_path, test_set_imageset, train_set_imageset, val_set_imageset):
+    source_label_path = os.path.join(source_path, 'label')
+    target_label_path = os.path.join(target_path,'training', 'label_2')
+    if not os.path.exists(target_label_path):
+        os.makedirs(target_label_path)
+
+    test_label_seq = []
+    with open(test_set_imageset,'r') as f:
+        test_labels_files = f.read().splitlines()
+    for file in test_labels_files:
+        label_tgt = file+'.txt'
+
+        if not os.path.isfile(os.path.join(inhouse_source_path,label_tgt)):
+            print(f'[TEST]: not found {label_tgt}, using shangqi gt')
+            continue
+        
+        os.symlink(
+            os.path.join(inhouse_source_path,label_tgt),
+            os.path.join(target_label_path,label_tgt)
+        )
+        test_label_seq.append(label_tgt)
+    assert(len(test_label_seq) == len(glob.glob(target_label_path + '/*.txt'))), 'test labels doesnt match'
+
+    train_label_seq = []
+    with open(train_set_imageset,'r') as f:
+        train_labels_files = f.read().splitlines()
+    for file in train_labels_files:
+        label_tgt = file+'.txt'
+        if not os.path.isfile(os.path.join(source_label_path,label_tgt)):
+            print(f'[TRAIN]: not found {label_tgt}, skip')
+            continue
+        
+        os.symlink(
+            os.path.join(source_label_path,label_tgt),
+            os.path.join(target_label_path,label_tgt)
+        )
+        train_label_seq.append(label_tgt)
+
+    val_label_seq = []
+    with open(val_set_imageset,'r') as f:
+        val_labels_files = f.read().splitlines()
+    for file in val_labels_files:
+        label_tgt = file+'.txt'
+        if not os.path.isfile(os.path.join(source_label_path,label_tgt)):
+            print(f'[VAL]: not found {label_tgt}, skip')
+            continue
+        
+        os.symlink(
+            os.path.join(source_label_path,label_tgt),
+            os.path.join(target_label_path,label_tgt)
+        )
+        val_label_seq.append(label_tgt)
+    
+    print('Found valid labels: ', len(train_label_seq), len(val_label_seq), len(test_label_seq))
+    return train_label_seq, val_label_seq, test_label_seq
+    
+
+def create_lidar(source_path, in_house_label_path, target_path):
+    lidar_path = os.path.join(target_path, 'lidar')
+    if not os.path.exists(lidar_path):
+        os.makedirs(lidar_path)
+    training_path = os.path.join(lidar_path, 'training')
+    if not os.path.exists(training_path):
+        os.makedirs(training_path)
+    testing_path = os.path.join(lidar_path, 'testing')
+    if not os.path.exists(testing_path):
+        os.makedirs(testing_path)
+    imageset_path = os.path.join(lidar_path, 'ImageSets')
+    if not os.path.exists(imageset_path):
+        os.makedirs(imageset_path)
+
+    train_set, test_set, val_set = os.path.join(source_path,'ImageSets/train.txt'),os.path.join(source_path,'ImageSets/test.txt'), os.path.join(source_path,'ImageSets/val.txt')
+    
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(training_path, 'calib')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(testing_path, 'calib')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'lidar'),
+        os.path.join(training_path, 'velodyne')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'lidar'),
+        os.path.join(testing_path, 'velodyne')
+    )
+
+    train_label_seq, val_label_seq, test_label_seq = create_label_link(source_path, in_house_label_path, lidar_path, test_set, train_set, val_set)
+    write_split_file(os.path.join(imageset_path, 'train.txt'), train_label_seq)
+    write_split_file(os.path.join(imageset_path, 'val.txt'), val_label_seq)
+    write_split_file(os.path.join(imageset_path, 'trainval.txt'), train_label_seq + val_label_seq)
+    write_split_file(os.path.join(imageset_path, 'test.txt'), test_label_seq)
+
+    os.symlink(
+        os.path.join(training_path, 'label_2'),
+        os.path.join(testing_path, 'label_2')
+    )
+
+def create_radar(source_path, target_path):
+    radar_path = os.path.join(target_path, 'radar')
+    if not os.path.exists(radar_path):
+        os.makedirs(radar_path)
+    training_path = os.path.join(radar_path, 'training')
+    if not os.path.exists(training_path):
+        os.makedirs(training_path)
+    testing_path = os.path.join(radar_path, 'testing')
+    if not os.path.exists(testing_path):
+        os.makedirs(testing_path)
+    
+    os.symlink(
+        os.path.join(target_path,'lidar', 'ImageSets'),
+        os.path.join(radar_path, 'ImageSets')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(training_path, 'calib')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(testing_path, 'calib')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'radar'),
+        os.path.join(training_path, 'velodyne')
+    )
+
+    os.symlink(
+        os.path.join(source_path, 'radar'),
+        os.path.join(testing_path, 'velodyne')
+    )
+
+    os.symlink(
+        os.path.join(target_path,'lidar', 'training','label_2'),
+        os.path.join(training_path, 'label_2')
+    )
+
+    os.symlink(
+        os.path.join(target_path,'lidar', 'training','label_2'),
+        os.path.join(testing_path, 'label_2')
+    )
+
 
 def main():
-    parser = argparse.ArgumentParser(description='Read raw radar sweeps')
-    parser.add_argument('load_dir', help='path to root of directory containing unprocessed data')
-    parser.add_argument('save_dir', help='path to root of directory to store processed data')
-    parser.add_argument('--skip_read_raw', action='store_true', help='skip read_raw.py')
-    parser.add_argument('--skip_extract_gt', action='store_true', help='skip extract_gt.py')
-    parser.add_argument('--skip_pcl_sync', action='store_true', help='skip pcl_sync.py')
-    parser.add_argument('--skip_copy_lidar', action='store_true', help='skip copy_lidar.py')
-    parser.add_argument('--skip_partition', action='store_true', help='skip partition.py')
-    # parser.add_argument('--skip_vis_pcl', action='store_true', help='skip vis_pcl.py')
-    parser.add_argument('--skip_label_filter', action='store_true', help='skip radar_label_filter.py')
-    parser.add_argument('-y', action='store_true', help='assume yes')
-    args = parser.parse_args()
-
-    _raw_paths = [
-        os.path.join(args.save_dir, 'inhouse_format', 'radar_raw'),
-        os.path.join(args.save_dir, 'inhouse_format', 'gt_raw'),
-    ]
-
-    print('*** STEP 0 - gather top-level directories and metadata ***')
-    dirs = _get_data_dirs(args.load_dir, args.y)
-    base_timestamps = {}
-    for dir in dirs:
-        base_timestamps[dir] = _get_base_timestamps(dir)
-        print(f'Using {base_timestamps[dir]} as base timestamps (from {dir}/meta.xml)')
-    # import ipdb
-    # ipdb.set_trace()
-    print('*** STEP 1 - read_raw.py ***')
-    if not args.skip_read_raw:
-        for dir in dirs:
-            print(f'*** {dir} ***')
-            read_raw.read_raw(dir, args.save_dir, base_timestamps[dir])
-    else: print('(skipped)')
-
-    print('*** STEP 2 - extract_gt.py ***')
-    if not args.skip_extract_gt:
-        for dir in dirs:
-            print(f'*** {dir} ***')
-            extract_gt.extract_gt(dir, args.save_dir)
-    else: print('(skipped)')
-
-    print('*** STEP 3 - pcl_sync.py ***')
-    if not args.skip_pcl_sync:
-        for dir in dirs:
-            print(f'*** {dir} ***')
-            pcl_sync.pcl_sync(dir, args.save_dir, base_timestamps[dir])
-        _purge(_raw_paths)  # remove unsynced gt and radar data to save storage
-    else: print('(skipped)')
-
-    print('*** STEP 4 - copy_lidar.py ***')
-    if not args.skip_copy_lidar: 
-        for dir in dirs:
-            print(f'*** {dir} ***')
-            copy_lidar.copy_lidar(dir, args.save_dir)
-    else: print('(skipped)')
-
-    print('*** STEP 5 - filter_radar_label.py ***')
-    if not args.skip_label_filter: 
-        filter_radar_label.filter_radar_label(args.save_dir)
-    else: print('(skipped)')
-
-
-    print('*** STEP 6 - partition.py ***')
-    if not args.skip_partition: 
-        partition.partition(args.save_dir)
-        _purge(_raw_paths)  # remove unsynced gt and radar data to save storage
-    else: print('(skipped)')
-    # print('*** STEP 6 - vis_pcl.py ***')
-    # if not args.skip_vis_pcl: 
-    #     for dir in dirs:
-    #         print(f'*** {dir} ***')
-    #         vis_pcl.vis_pcl(dir, args.save_dir)
-    # else: print('(skipped)')
-
-    print('*** PREPROCESSING COMPLETED ***')
+    print('start')
+    source_path = '/mnt/12T/hantao/shangqi/kitti_format'
+    in_house_label_path = '/mnt/12T/hantao/shangqi/inhouse_labels'
+    target_path = '/mnt/12T/hantao/shangqi/inhouse_final_in_kitti'
+    create_lidar(source_path, in_house_label_path, target_path)
+    create_radar(source_path, target_path)
 
 if __name__ == '__main__':
     main()
