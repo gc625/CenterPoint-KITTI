@@ -19,7 +19,7 @@ from vod.visualization import Visualization3D
 from skimage import io
 from vis_tools import fov_filtering, make_vid
 from glob import glob
-
+import matplotlib.cm as cm
 # from vis_tools import fov_filtering
 
 
@@ -136,19 +136,26 @@ def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set):
 
     # print(len(frame_ids))
     
+
+
+
     # get pcd
-    radar_points = frame_data.radar_data
-    radar_points = transform_pcl(radar_points,vod_calib.t_lidar_radar)
-    radar_points = fov_filtering(radar_points,frame_ids[frame_id],is_radar=False)
+    original_radar = frame_data.radar_data
+    radar_points = transform_pcl(original_radar,vod_calib.t_lidar_radar)
+    radar_points,flag = fov_filtering(radar_points,frame_ids[frame_id],is_radar=False,return_flag=True)
     lidar_points = frame_data.lidar_data 
     lidar_points = fov_filtering(lidar_points,frame_ids[frame_id],is_radar=True)
 
     
+    colors = cm.spring(original_radar[flag][:,4])[:,:3]
+
+
+
     # convert into o3d pointcloud object
     radar_pcd = o3d.geometry.PointCloud()
     radar_pcd.points = o3d.utility.Vector3dVector(radar_points[:,0:3])
     # radar_colors = np.ones_like(radar_points[:,0:3])
-    # radar_pcd.colors = o3d.utility.Vector3dVector(radar_colors)
+    radar_pcd.colors = o3d.utility.Vector3dVector(colors)
     
     lidar_pcd = o3d.geometry.PointCloud()
     lidar_pcd.points = o3d.utility.Vector3dVector(lidar_points[:,0:3])
@@ -334,9 +341,9 @@ def main():
     #------------------------------------SETTINGS------------------------------------
     frame_id = 333
     is_test_set = True
-    tag = 'CFAR_lidar_rcsv'
+    tag = 'CFAR_radar'
     CAMERA_POS_PATH = 'test_pos.json'
-    output_name = tag+'_testset' if is_test_set else tag 
+    output_name = tag+'_testset_spring' if is_test_set else tag 
     OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  output_name
     #--------------------------------------------------------------------------------
 
@@ -362,25 +369,25 @@ def main():
     #     plot_labels=True,
     #     plot_predictions=False)
 
-    vis_all_frames(
-        kitti_locations,
-        test_dt_path,
-        CAMERA_POS_PATH,
-        OUTPUT_IMG_PATH,
-        plot_radar_pcd=False,
-        plot_lidar_pcd=True,
-        plot_labels=False,
-        plot_predictions=True,
-        is_test_set=is_test_set)
+    # vis_all_frames(
+    #     kitti_locations,
+    #     test_dt_path,
+    #     CAMERA_POS_PATH,
+    #     OUTPUT_IMG_PATH,
+    #     plot_radar_pcd=True,
+    #     plot_lidar_pcd=False,
+    #     plot_labels=False,
+    #     plot_predictions=True,
+    #     is_test_set=is_test_set)
 
 
 
     
     # TODO: put this into a function 
-    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcsvtest/LidarPred'
-    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcsvtest/CFAR_lidar_rcsvtest_.mp4'
-    # dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
-    # make_vid(dt_imgs, save_path, fps=15)
+    test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/RadarPred'
+    save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/CFAR_radar_testset_spring.mp4'
+    dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
+    make_vid(dt_imgs, save_path, fps=15)
 
 #%%
 if __name__ == "__main__":
