@@ -254,11 +254,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     gt_dict = {}
     try:
         for info in dataset.kitti_infos:
-            frame_id = copy.deepcopy(info['image']['image_idx'])
+            frame_id = copy.deepcopy(info['point_cloud']['lidar_idx'])
             gt_anno = copy.deepcopy(info['annos'])
             gt_dict[frame_id] = gt_anno
             pass
-    except:
+    except Exception:
         logger.info('no available gt annos, running as testing')
 
         if save_to_file:

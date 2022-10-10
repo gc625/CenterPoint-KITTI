@@ -435,8 +435,7 @@ class InhouseNewDataset(DatasetTemplate):
         if self._merge_all_iters_to_one_epoch:
             return len(self.kitti_infos) * self.total_epochs
 
-        # return len(self.kitti_infos)
-        return 100
+        return len(self.kitti_infos)
 
     def __getitem__(self, index):
         # index = 4
@@ -513,7 +512,7 @@ class InhouseNewDataset(DatasetTemplate):
         return data_dict
 
 
-def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=4):
+def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=8):
     dataset = InhouseNewDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = 'train', 'val'
 
