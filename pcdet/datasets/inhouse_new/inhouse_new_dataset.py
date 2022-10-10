@@ -435,7 +435,8 @@ class InhouseNewDataset(DatasetTemplate):
         if self._merge_all_iters_to_one_epoch:
             return len(self.kitti_infos) * self.total_epochs
 
-        return len(self.kitti_infos)
+        # return len(self.kitti_infos)
+        return 100
 
     def __getitem__(self, index):
         # index = 4
@@ -540,7 +541,7 @@ def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=4
     print('Kitti info trainval file is saved to %s' % trainval_filename)
 
     dataset.set_split('test')
-    kitti_infos_test = dataset.get_infos(num_workers=workers, has_label=False, count_inside_pts=False)
+    kitti_infos_test = dataset.get_infos(num_workers=workers, has_label=True, count_inside_pts=False)
     with open(test_filename, 'wb') as f:
         pickle.dump(kitti_infos_test, f)
     print('Kitti info test file is saved to %s' % test_filename)
