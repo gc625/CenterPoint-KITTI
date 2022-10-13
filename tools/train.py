@@ -6,6 +6,7 @@ import os
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 from pathlib import Path
+from re import S
 from test import repeat_eval_ckpt, eval_single_ckpt
 # from eval_utils import eval_utils
 import torch
@@ -48,6 +49,7 @@ def parse_config():
     # parser.add_argument('--modality', default='lidar', help='specify data modality, default is lidar.')
     parser.add_argument('--eval_epoch', type=int, default=1, help='number of epoch for eval once')
     parser.add_argument('--eval_save', type=bool, default=True, help='save best eval model during training')
+    parser.add_argument('--multi_gpu', type=bool, default=False, help='whether to use multiple gpu for training')
 
     args = parser.parse_args()
     print(args.freeze_part)
@@ -71,7 +73,6 @@ def main():
             args.tcp_port, args.local_rank, backend='nccl'
         )
         dist_train = True
-
     if args.batch_size is None:
         args.batch_size = cfg.OPTIMIZATION.BATCH_SIZE_PER_GPU
     else:
@@ -102,6 +103,7 @@ def main():
     logger.info('CUDA_VISIBLE_DEVICES=%s' % gpu_list)
 
     if dist_train:
+        logger.info('visble GPUs count: %d' % total_gpus)
         logger.info('total_batch_size: %d' % (total_gpus * args.batch_size))
     for key, val in vars(args).items():
         logger.info('{:16} {}'.format(key, val))
@@ -126,6 +128,7 @@ def main():
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=train_set, tb_log=tb_log)
     if args.sync_bn:
         model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
+    
     model.cuda()
     
     optimizer = build_optimizer(model, cfg.OPTIMIZATION)
@@ -182,7 +185,14 @@ def main():
     if cfg.get('USE_ATTACH', False):
         model.freeze_attach(logger)
         
+    freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
+    # all attribute related operation should be perform before parallel wrapper
+
     if dist_train:
+        logger.info('distributed training')
+        logger.info('cfg.LOCAL_RANK = ', cfg.LOCAL_RANK)
+        logger.info('device count %d ' % torch.cuda.device_count())
+        logger.info([cfg.LOCAL_RANK % torch.cuda.device_count()])
         model = nn.parallel.DistributedDataParallel(model, device_ids=[cfg.LOCAL_RANK % torch.cuda.device_count()])
     logger.info(model)
 
@@ -228,7 +238,8 @@ def main():
         logger=logger,
         eval_epoch=args.eval_epoch,
         eval_output_dir=eval_output_dir,
-        save_best_eval=args.eval_save
+        save_best_eval=args.eval_save,
+        freeze_mode=freeze_mode
     )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'

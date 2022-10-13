@@ -193,7 +193,7 @@ def set_camera_position(vis_dict,output_name):
     geometries += vis_dict['o3d_labels']
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window()    
+    vis.create_window(width=1280,height=720)    
     for g in geometries:
         vis.add_geometry(g)
     opt = vis.get_render_option()
@@ -290,7 +290,7 @@ def vis_all_frames(
             plot_lidar_pcd=plot_lidar_pcd,
             plot_labels=plot_labels,
             plot_predictions=plot_predictions)
-
+        # break
     
 
 # %%
@@ -340,18 +340,24 @@ def main():
     base_path = abs_path.parents[1]
     #------------------------------------SETTINGS------------------------------------
     frame_id = 333
-    is_test_set = True
-    tag = 'CFAR_radar'
+    resolution_dict = {
+        '720': [720, 1280]
+    }
+    resolution = '720'
+    is_test_set = False
+    tag = 'CFAR_lidar_rcsv'
     CAMERA_POS_PATH = 'test_pos.json'
-    output_name = tag+'_testset_spring' if is_test_set else tag 
-    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  output_name
+    output_name = tag+'_testset' if is_test_set else tag 
+    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution)
     #--------------------------------------------------------------------------------
 
     OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
     detection_result_path = base_path / path_dict[tag]
 
     dt_path = str(detection_result_path / 'result.pkl')    
-    test_dt_path = base_path / test_dict[tag]
+    test_dt_path = base_path / test_dict[tag] if is_test_set else base_path / path_dict[tag]
+
+    vis_path = test_dt_path if is_test_set else dt_path
 
     kitti_locations = get_kitti_locations(vod_data_path)
     

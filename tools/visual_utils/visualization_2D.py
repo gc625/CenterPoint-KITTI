@@ -1,14 +1,14 @@
 # %%
-from vod import frame
+# from vod import frame
 from vod.configuration import KittiLocations
 from vod.frame import FrameDataLoader, FrameLabels, FrameTransformMatrix
-from vod.frame.transformations import homogeneous_coordinates, homogeneous_transformation
-from vod.visualization.helpers import get_transformed_3d_label_corners,get_3d_label_corners
-from vod.visualization import Visualization3D, Visualization2D
-from mpl_toolkits import mplot3d
+# from vod.frame.transformations import homogeneous_coordinates, homogeneous_transformation
+# from vod.visualization.helpers import get_transformed_3d_label_corners,get_3d_label_corners
+from vod.visualization import Visualization2D
+# from mpl_toolkits import mplot3d
 
 import numpy as np
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import pickle
 
 
@@ -54,7 +54,7 @@ def get_pred_dict(dt_file):
     return labels_dict
 
 # %%
-
+from pathlib import Path
 
 ## path here: eg /root/dj/code/CenterPoint-KITTI/output/{MODEL-NAME}/{TAG}/eval/eval_with_train/epoch_{XX}/val/result.pkl
 # predicted_pkl_path = '/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod/domain_cross_init_car/eval/eval_with_train/epoch_80/val/result.pkl'
@@ -67,25 +67,32 @@ root_dir = '/root/dj/code/CenterPoint-KITTI/data'
 pred_dict = get_pred_dict(predicted_pkl_path)
 frame_ids = list(pred_dict.keys())
 
- 
+op_dir = '/root/dj/code/CenterPoint-KITTI/output/vod_vis/rbg_with_labels/'
+temp = Path(op_dir).mkdir(exist_ok=True)
 kitti_locations = KittiLocations(root_dir=root_dir,
-                                output_dir="output/",
+                                output_dir=op_dir,
                                 frame_set_path="",
                                 pred_dir="",
                                 )
-
-
+#%%
+from tqdm import tqdm
 # type frame u want to see here instead of "00334", or index into frame_ids[0...1295]
-frame_data = FrameDataLoader(kitti_locations,
-                             frame_ids[0],pred_dict)
+for id in tqdm(frame_ids):
+    frame_data = FrameDataLoader(kitti_locations,
+                                id)
 
-vis2d = Visualization2D(frame_data)
-vis2d.draw_plot(show_radar=False,show_lidar=True,show_gt=False,show_pred=True)
+    vis2d = Visualization2D(frame_data)
+    vis2d.draw_plot(show_radar=False,show_lidar=False,show_gt=True,show_pred=False, plot_figure=False)
 
 
 
 #%% 
+from vis_tools import make_vid
+from glob import glob
 
+imgs = sorted(glob(op_dir+'*.png'))
+op_vid = '/root/dj/code/CenterPoint-KITTI/output/vod_vis/rgb_with_label.mp4'
+make_vid(imgs, op_vid, fps=10)
 
 
 

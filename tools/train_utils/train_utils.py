@@ -80,10 +80,10 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
 def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, save_best_eval=False):
+                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, save_best_eval=False, freeze_mode=None):
     accumulated_iter = start_iter
     # freeze some layers
-    freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
+    # freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
 
     if freeze_mode is not None:
         mode_list = ['backbone_3d', 'multibackbone', 'head', 'attach']
@@ -100,6 +100,7 @@ def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr
                                 if logger is not None:
                                     logger.info('freeze params in {name}'.format(name=name))
     best_eval_mAP_3d = 0.0
+    best_eval_dict = None
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:
@@ -152,6 +153,9 @@ def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr
                     result_dir=eval_output_dir, save_best_eval=save_best_eval, best_mAP_3d=best_eval_mAP_3d
                 )
                 best_eval_mAP_3d = max(best_eval_mAP_3d, float(ret_dict['mAP_3d']))
+                # if best_eval_mAP_3d < float(ret_dict['mAP_3d']):
+                #     best_eval_dict =
+                #     pass
 
 
 def model_state_to_cpu(model_state):

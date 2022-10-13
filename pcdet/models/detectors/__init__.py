@@ -25,7 +25,7 @@ __all__ = {
     'CenterPoint': CenterPoint,
     'CenterPointRCNN': CenterPointRCNN,
     'IASSD': IASSD,
-    'IASSDX': IASSD_X,
+    # 'IASSDX': IASSD_X,
     'IASSDGAN': IASSD_GAN,
     'IASSDGAN_clean': IASSD_GAN_clean,
     '3DSSD': Point3DSSD,

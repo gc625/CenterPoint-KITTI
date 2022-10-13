@@ -398,9 +398,9 @@ class IASSD_GAN(Detector3DTemplate):
             'att': attach_dict,
             'batch': batch_dict
         }
-        if self.cross_over_cfg is None:
-            transfer_loss = self.transfer(transfer_dict)
-        elif self.feature_aug is not None:
+        # if self.cross_over_cfg is None:
+        #     transfer_loss = self.transfer(transfer_dict)
+        if self.use_feature_aug:
             # feature matching loss is already calculated in get_training_loss(), 
             # here we only calculate the shared_det_loss
             radar_shared_feat = batch_dict['radar_shared']
@@ -876,6 +876,7 @@ class FeatureAug(nn.Module):
         self.lidar_shared_mlp = CrossOverBlock(self.mlps, self.channel_in, relu=self.relu, bn=self.bn)
         self.radar_shared_mlp = CrossOverBlock(self.mlps, self.channel_in, relu=self.relu, bn=self.bn)
         self.forward_dict = {}
+        self.use_centroid = model_cfg.get('USE_CENTROID', True)
     
     def forward(self, x):
         batch_dict = x
@@ -903,7 +904,8 @@ class FeatureAug(nn.Module):
                 raise RuntimeError('Nan occurs in domain cross over!')
         
             shared_lidar = self.lidar_shared_mlp(lidar_feat) # [B, C, N]
-
+        # import ipdb 
+        # ipdb.set_trace()
         if self.training or self.debug:
             self.forward_dict['batch_size'] = batch_dict['batch_size']
             self.forward_dict['lidar_original'] = lidar_feat
@@ -914,6 +916,8 @@ class FeatureAug(nn.Module):
             self.forward_dict['radar_xyz'] = radar_xyz
             self.forward_dict['lidar_centers'] = attach_dict['centers']
             self.forward_dict['radar_centers'] = batch_dict['centers']
+            self.forward_dict['lidar_centers_origin'] = attach_dict['centers_origin']
+            self.forward_dict['radar_centers_origin'] = batch_dict['centers_origin']
 
             batch_dict['radar_shared'] = shared_radar
         # cat augmented feature to the original feature 'centers_features'
@@ -947,15 +951,26 @@ class FeatureAug(nn.Module):
         radar_shared_feat = self.forward_dict['radar_shared'].permute(0,2,1)
         # lidar_xyz = x['lidar_xyz']
         # radar_xyz = x['radar_xyz']
-        lidar_xyz = lidar_center
-        radar_xyz = radar_center    
+        _, lidar_origin, _ = self.break_up_pc(self.forward_dict['lidar_centers_origin'])
 
+        _, radar_origin, _ = self.break_up_pc(self.forward_dict['radar_centers_origin'])
+        lidar_origin = lidar_origin.view(batch_size, -1, 3)
+        radar_origin = radar_origin.view(batch_size, -1, 3)
+
+        if self.use_centroid:
+            lidar_xyz = lidar_center
+            radar_xyz = radar_center    
+        else:
+            lidar_xyz = lidar_origin        
+            radar_xyz = radar_origin
         # rec_lidar_loss = nn.functional.mse_loss(lidar_original, lidar_recover, reduction='mean')
         # rec_radar_loss = nn.functional.mse_loss(radar_original, radar_recover, reduction='mean')
         # # # recover loss
         # rec_loss = (rec_lidar_loss + rec_radar_loss)/2
         
         # matching loss
+        # import ipdb
+        # ipdb.set_trace()
         self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
         cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should get the one and only result
         mask = mask.unsqueeze(-1).unsqueeze(-1)
