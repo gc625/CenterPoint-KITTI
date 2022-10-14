@@ -16,20 +16,24 @@ from matplotlib.patches import Patch
 from skimage import io
 from matplotlib.transforms import Affine2D
 
-def fov_filtering(pts, frame_id, is_radar=True, is_test=False):
+def fov_filtering(pts, frame_id, is_radar=True, is_test=False,return_flag=False):
     modality = 'radar' if is_radar else 'lidar'
     split = 'testing' if is_test else 'training'
 
-    img_file = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/image_2/%s.jpg"%(modality, split, frame_id)
+    img_file = "/root/gabriel/code/parent/CenterPoint-KITTI/data/vod_%s/%s/image_2/%s.jpg"%(modality, split, frame_id)
     # assert img_file.exists(), f"failed on {idx}, img file = {img_file}"
     img_shape = np.array(io.imread(img_file).shape[:2], dtype=np.int32)
 
-    calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/calib/%s.txt"%(modality, split, frame_id)
+    calib_path = "/root/gabriel/code/parent/CenterPoint-KITTI/data/vod_%s/%s/calib/%s.txt"%(modality, split, frame_id)
     calib = calibration_kitti.Calibration(calib_path)
     pts_rect = calib.lidar_to_rect(pts[:, 0:3])
     fov_flag = get_fov_flag(pts_rect, img_shape, calib)
     pts_fov = pts[fov_flag]
-    return pts_fov
+    
+    if return_flag:
+        return pts_fov, fov_flag
+    else:
+        return pts_fov
 
 def get_img_file(frame_id, is_radar=True, is_test=False):
     modality = 'radar' if is_radar else 'lidar'
