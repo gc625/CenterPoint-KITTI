@@ -193,9 +193,12 @@ def create_radar(source_path, target_path):
 
 def main():
     print('start')
-    source_path = '/mnt/12T/hantao/shangqi/kitti_format'
+    # source_path = '/mnt/12T/hantao/shangqi/kitti_format'
     in_house_label_path = '/mnt/12T/hantao/shangqi/inhouse_labels'
-    target_path = '/mnt/12T/hantao/shangqi/inhouse_final_in_kitti'
+    # target_path = '/mnt/12T/hantao/shangqi/inhouse_final_in_kitti'
+    source_path = '/mnt/12T/hantao/shangqi_new/kitti_format'
+    # in_house_label_path = '/mnt/12T/hantao/shangqi_new/inhouse_labels'
+    target_path = '/mnt/12T/hantao/shangqi_new/inhouse_final_in_kitti'
     create_lidar(source_path, in_house_label_path, target_path)
     create_radar(source_path, target_path)
 

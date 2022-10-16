@@ -129,7 +129,8 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends
     for rec in rec_list:
         ax.add_patch(rec)
 
-    legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
+    # legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
+    legend_elements = [Patch(facecolor='white', edgecolor='blue', label='DT'), Patch(facecolor='white', edgecolor='red', label='GT')]
     if centers is not None:
         legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
                           markerfacecolor='r', markersize=10)]
@@ -151,7 +152,7 @@ if __name__ == '__main__':
     
 
     # CHANGE PATH 
-    root_path = P('/root/gabriel/code/parent/CenterPoint-KITTI/output/initial_pct_0401/eval/checkpoint_epoch_18')
+    root_path = P('/root/hantao/CenterPoint-KITTI/output/pointpillar_inhouse_new_lidar/initial_pct_0401/eval/checkpoint_epoch_40')
     color_dict = {}
 
     gt_save_dir = root_path / 'GT_all_bev'

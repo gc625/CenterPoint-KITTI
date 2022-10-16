@@ -64,8 +64,8 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty, roi_clean=False):  #
 
         ignore = False
 
-        if ((gt_anno["occluded"][i] > max_instance_occlusion[difficulty])
-                or (height <= min_instance_height[difficulty])):
+        if (gt_anno["occluded"][i] > max_instance_occlusion[difficulty]):
+            print('ignore occluded')
             ignore = True
 
         # ignore gts with centers outside the lane or farther than 25m
@@ -101,11 +101,11 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty, roi_clean=False):  #
         else:
             valid_class = -1
 
-        height = abs(dt_anno["bbox"][i, 3] - dt_anno["bbox"][i, 1])
-        if height < min_instance_height[difficulty]:
-            ignored_dt.append(1)
+        # height = abs(dt_anno["bbox"][i, 3] - dt_anno["bbox"][i, 1])
+        # if height < min_instance_height[difficulty]:
+        #     ignored_dt.append(1)
 
-        elif (x < left or x > right or z > max_distance) and roi_clean:
+        if (x < left or x > right or z > max_distance) and roi_clean:
             ignored_dt.append(1)
 
         elif valid_class == 1:
@@ -187,6 +187,40 @@ def d3_box_overlap(boxes, q_boxes, criterion=-1):
     d3_box_overlap_kernel(boxes, q_boxes, r_inc, criterion)
     return r_inc
 
+def d3_box_overlap_lidar(boxes, qboxes):
+    # calculate 3d iou with CPU in lidar coordinate
+    # code adapted from ....ops.iou3d_nms.iou3d_nms_cuda()
+    """
+    Args:
+        boxes: (N, 7) [x, y, z, dx, dy, dz, heading]
+        qboxes: (M, 7) [x, y, z, dx, dy, dz, heading]
+    Returns:
+        ans_iou: (N, M)
+    """
+    assert boxes.shape[1] == qboxes.shape[1] == 7
+
+    # height overlap
+    boxes_a_height_max = (boxes[:, 2] + boxes[:, 5] / 2).reshape(-1, 1)
+    boxes_a_height_min = (boxes[:, 2] - boxes[:, 5] / 2).reshape(-1, 1)
+    boxes_b_height_max = (qboxes[:, 2] + qboxes[:, 5] / 2).reshape(1, -1)
+    boxes_b_height_min = (qboxes[:, 2] - qboxes[:, 5] / 2).reshape(1, -1)
+    # height_min = np.concatenate((boxes_a_height_min, boxes_b_height_min), axis=-1)
+    max_of_min = np.maximum(boxes_a_height_min, boxes_b_height_min)
+    
+    min_of_max = np.minimum(boxes_a_height_max, boxes_b_height_max)
+
+    overlaps_h = np.clip(min_of_max - max_of_min, a_min=0, a_max=np.inf)
+
+    overlaps_bev = rotate_iou_eval(boxes[:, [0, 1, 3, 4, 6]],
+                               qboxes[:, [0, 1, 3, 4, 6]], 2)
+
+    overlaps_3d = overlaps_bev * overlaps_h
+
+    vol_a = (boxes[:, 3] * boxes[:, 4] * boxes[:, 5]).reshape(-1, 1)
+    vol_b = (qboxes[:, 3] * qboxes[:, 4] * qboxes[:, 5]).reshape(1, -1)
+    
+    iou_3d = overlaps_3d / np.clip(vol_a + vol_b - overlaps_3d, a_min=1e-6, a_max=np.inf)
+    return iou_3d
 
 @numba.jit(nopython=False)
 def compute_statistics_jit(overlaps,
@@ -443,7 +477,7 @@ def calculate_iou_partly(gt_annotations, dt_annotations, metric, num_parts=50):
             rots = np.concatenate([a["rotation_y"] for a in dt_annotations_part], 0)
             dt_boxes = np.concatenate(
                 [loc, dims, rots[..., np.newaxis]], axis=1)
-            overlap_part = d3_box_overlap(gt_boxes, dt_boxes).astype(
+            overlap_part = d3_box_overlap_lidar(gt_boxes, dt_boxes).astype(
                 np.float64)
         else:
             raise ValueError("unknown metric")
@@ -533,6 +567,8 @@ def eval_class(gt_annotations,
     # iou is calculated in "parts = cluster of frames"
     rets = calculate_iou_partly(dt_annotations, gt_annotations, metric, num_parts)
     overlaps, parted_overlaps, total_dt_num, total_gt_num = rets
+    # print('total_dt_num', total_gt_num)
+    # print('total_dc_num', total_dt_num)
 
     N_SAMPLE_PTS = 41  # what is this number
     num_min_overlap = len(min_overlaps)  # 2
@@ -549,7 +585,7 @@ def eval_class(gt_annotations,
             rets = _prepare_data(gt_annotations, dt_annotations, current_class, difficulty, custom_method=custom_method)
             (gt_datas_list, dt_datas_list, ignored_gts, ignored_dets,
              dontcares, total_dc_num, total_num_valid_gt) = rets
-
+            # print('total_num_valid_gt after clean', total_num_valid_gt)
             for k, min_overlap in enumerate(min_overlaps[:, metric, m]):
                 new_thresholds = []
                 for i in range(len(gt_annotations)):  # per frame
