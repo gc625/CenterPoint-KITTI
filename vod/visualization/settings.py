@@ -4,6 +4,7 @@ label_color_palette_2d = {'Cyclist': (1, 0.0, 0.0),
                        'Car_pred': (0.4, 1.0, 1.0), # cyan/light blue
                        'Pedestrian_pred': (0.8, 1.0, 0.6), # very light green
                        'Cyclist_pred': (1.0, 0.7, 0.7),
+                       'Truck': (0.41,0.41,0.41),  # light red 
                        'Others': (0.41,0.41,0.41)}  # light red 
 
 axis_length_3d = 1

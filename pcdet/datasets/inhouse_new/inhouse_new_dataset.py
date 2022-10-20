@@ -98,20 +98,18 @@ class InhouseNewDataset(DatasetTemplate):
     def get_attach_radar(self, idx):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
-        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
-        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x', 'y', 'z', 'fSpeed', 'fPower', 'fRCS'])
+        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 6)
         
         assert lidar_file.exists()
         
         idx = [0,1,2]
-        if 'RCS' in used_feature_list:
+        if 'fSpeed' in used_feature_list:
             idx += [3]
-        if 'v_r' in used_feature_list:
+        if 'fPower' in used_feature_list:
             idx += [4]
-        if 'v_r_compensated' in used_feature_list:
+        if 'fRCS' in used_feature_list:
             idx += [5]
-        if 'time' in used_feature_list:
-            idx += [6]
         idx = np.array(idx)
         
         if self.block_point_cloud_features:
@@ -124,7 +122,7 @@ class InhouseNewDataset(DatasetTemplate):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         # print(lidar_file)
         assert lidar_file.exists()
-        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 6)
         if self.block_point_cloud_features:
             radar_point_cloud[:, 3:] = 0
         return radar_point_cloud
@@ -147,7 +145,7 @@ class InhouseNewDataset(DatasetTemplate):
     def get_attach_calib(self, idx):
         calib_file = self.root_split_path / 'attach_calib' / ('%s.txt' % idx)
         assert calib_file.exists()
-        return calibration_kitti.Calibration(calib_file)
+        return calibration_kitti.Calibration(calib_file, mode='inhouse')
 
     def get_road_plane(self, idx):
         plane_file = self.root_split_path / 'planes' / ('%s.txt' % idx)
@@ -359,14 +357,15 @@ class InhouseNewDataset(DatasetTemplate):
 
             calib = batch_dict['calib'][batch_index]
             image_shape = batch_dict['image_shape'][batch_index]
-            pred_boxes_camera = box_utils.boxes3d_lidar_to_kitti_camera(pred_boxes, calib)
-            pred_boxes_img = box_utils.boxes3d_kitti_camera_to_imageboxes(
-                pred_boxes_camera, calib, image_shape=image_shape
-            )
+            # pred_boxes_camera = box_utils.boxes3d_lidar_to_kitti_camera(pred_boxes, calib)
+            pred_boxes_camera = pred_boxes
+            # pred_boxes_img = box_utils.boxes3d_kitti_camera_to_imageboxes(
+            #     pred_boxes_camera, calib, image_shape=image_shape
+            # )
 
             pred_dict['name'] = np.array(class_names)[pred_labels - 1]
             pred_dict['alpha'] = -np.arctan2(-pred_boxes[:, 1], pred_boxes[:, 0]) + pred_boxes_camera[:, 6]
-            pred_dict['bbox'] = pred_boxes_img
+            # pred_dict['bbox'] = pred_boxes_img
             pred_dict['dimensions'] = pred_boxes_camera[:, 3:6]
             pred_dict['location'] = pred_boxes_camera[:, 0:3]
             pred_dict['rotation_y'] = pred_boxes_camera[:, 6]
@@ -434,9 +433,7 @@ class InhouseNewDataset(DatasetTemplate):
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
             return len(self.kitti_infos) * self.total_epochs
-
-        # return len(self.kitti_infos)
-        return 100
+        return len(self.kitti_infos)
 
     def __getitem__(self, index):
         # index = 4
@@ -513,7 +510,7 @@ class InhouseNewDataset(DatasetTemplate):
         return data_dict
 
 
-def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=4):
+def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=8):
     dataset = InhouseNewDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = 'train', 'val'
 

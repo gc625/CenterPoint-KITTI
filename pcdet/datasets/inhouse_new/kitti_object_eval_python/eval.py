@@ -53,9 +53,9 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty, distance_range=None,
         else:
             valid_class = -1
         ignore = False
-        if ((gt_anno["occluded"][i] > MAX_OCCLUSION[difficulty])
+        if ((gt_anno["occluded"][i] > MAX_OCCLUSION[difficulty])):
                 # or (gt_anno["truncated"][i] > MAX_TRUNCATION[difficulty])
-                or (height <= MIN_HEIGHT[difficulty])):
+                # or (height <= MIN_HEIGHT[difficulty])):
             # if gt_anno["difficulty"][i] > difficulty or gt_anno["difficulty"][i] == -1:
             ignore = True
         if distance_range is not None:
@@ -90,10 +90,10 @@ def clean_data(gt_anno, dt_anno, current_class, difficulty, distance_range=None,
             points_in_box = dt_anno['points_in_box_count'][i]
             if points_in_box < box_count_threshold[0] or points_in_box >= box_count_threshold[1]:
                 ignore = True   
-        height = abs(dt_anno["bbox"][i, 3] - dt_anno["bbox"][i, 1])
-        if height < MIN_HEIGHT[difficulty]:
-            ignored_dt.append(1)
-        elif valid_class == 1:
+        # height = abs(dt_anno["bbox"][i, 3] - dt_anno["bbox"][i, 1])
+        # if height < MIN_HEIGHT[difficulty]:
+        #     ignored_dt.append(1)
+        if valid_class == 1:
             ignored_dt.append(0)
         else:
             ignored_dt.append(-1)

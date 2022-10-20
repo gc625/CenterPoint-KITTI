@@ -254,11 +254,11 @@ def eval_one_epoch(cfg, model, dataloader, epoch_id, logger, dist_test=False, sa
     gt_dict = {}
     try:
         for info in dataset.kitti_infos:
-            frame_id = copy.deepcopy(info['image']['image_idx'])
+            frame_id = copy.deepcopy(info['point_cloud']['lidar_idx'])
             gt_anno = copy.deepcopy(info['annos'])
             gt_dict[frame_id] = gt_anno
             pass
-    except:
+    except Exception:
         logger.info('no available gt annos, running as testing')
 
         if save_to_file:
@@ -373,6 +373,29 @@ def log_kitti_result(eval_results, logger, ret_dict):
     ret_dict['mAP_3d_kitti'] = (kitti_evaluation_result['entire_area']['Car_3d_all'] + kitti_evaluation_result['entire_area']['Pedestrian_3d_all'] + kitti_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
 
 def log_vod_result(eval_results, logger, ret_dict):
+    logger.info('*************   vod official evaluation script   *************')
+    vod_evaluation_result = eval_results['vod_eval']
+    logger.info("Results: \n"
+        f"Entire annotated area: \n"
+        f"Car: {vod_evaluation_result['entire_area']['Car_3d_all']} \n"
+        f"Pedestrian: {vod_evaluation_result['entire_area']['Pedestrian_3d_all']} \n"
+        f"Cyclist: {vod_evaluation_result['entire_area']['Cyclist_3d_all']} \n"
+        f"mAP: {(vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3} \n"
+        f"Driving corridor area: \n"
+        f"Car: {vod_evaluation_result['roi']['Car_3d_all']} \n"
+        f"Pedestrian: {vod_evaluation_result['roi']['Pedestrian_3d_all']} \n"
+        f"Cyclist: {vod_evaluation_result['roi']['Cyclist_3d_all']} \n"
+        f"mAP: {(vod_evaluation_result['roi']['Car_3d_all'] + vod_evaluation_result['roi']['Pedestrian_3d_all'] + vod_evaluation_result['roi']['Cyclist_3d_all']) / 3} \n"
+        )
+
+
+    current_epoch_mAP_3d = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
+    ret_dict['mAP_3d'] = current_epoch_mAP_3d
+    
+    ret_dict['mAP_3d_vod'] = (vod_evaluation_result['entire_area']['Car_3d_all'] + vod_evaluation_result['entire_area']['Pedestrian_3d_all'] + vod_evaluation_result['entire_area']['Cyclist_3d_all']) / 3
+    return current_epoch_mAP_3d
+
+def log_inhouse_result(eval_results, logger, ret_dict):
     logger.info('*************   vod official evaluation script   *************')
     vod_evaluation_result = eval_results['vod_eval']
     logger.info("Results: \n"

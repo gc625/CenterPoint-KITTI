@@ -3,6 +3,8 @@ import glob
 import os
 from tabnanny import check
 from typing import no_type_check
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 def write_split_file(path, timestamps):
     with open(path, 'w') as f:
@@ -14,6 +16,15 @@ def check_if_empty_label(label_path):
     if len(lines) == 0:
         return True
     return False
+
+def get_matrix_from_ext(ext):
+    rot = R.from_euler('ZYX', ext[3:], degrees=True)
+    rot_m = rot.as_matrix()
+    x, y, z = ext[:3]
+    tr = np.eye(4)
+    tr[:3,:3] = rot_m
+    tr[:3, 3] = np.array([x, y, z]).T
+    return tr
 
 def create_label_link(source_path, inhouse_source_path, target_path, test_set_imageset, train_set_imageset, val_set_imageset):
     source_label_path = os.path.join(source_path, 'label')
@@ -97,6 +108,20 @@ def create_label_link(source_path, inhouse_source_path, target_path, test_set_im
     return train_label_seq, val_label_seq, test_label_seq
     
 
+def transform_lidar(input_path, output_path, lidar_tr):
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    lidar_files = glob.glob(input_path + '/*.bin')
+    for lidar_file in lidar_files:
+        lidar = np.fromfile(lidar_file, dtype=np.float32).reshape(-1, 4)
+        pc = lidar[:, :3]
+        pc = np.hstack((pc, np.ones((pc.shape[0], 1),dtype=np.float32)))
+        pc = np.dot(pc, lidar_tr.T)
+        pc.astype(np.float32)
+        lidar[:, :3] = pc[:, :3]
+        lidar.tofile(os.path.join(output_path, lidar_file.split('/')[-1]))
+
+
 def create_lidar(source_path, in_house_label_path, target_path):
     lidar_path = os.path.join(target_path, 'lidar')
     if not os.path.exists(lidar_path):
@@ -123,13 +148,12 @@ def create_lidar(source_path, in_house_label_path, target_path):
         os.path.join(testing_path, 'calib')
     )
 
-    os.symlink(
-        os.path.join(source_path, 'lidar'),
-        os.path.join(training_path, 'velodyne')
-    )
+    lidar_ext = [-2.5, 0, 2.03, 4.9, -1.5, 0]
+    lidar_tr = get_matrix_from_ext(lidar_ext)
+    transform_lidar(os.path.join(source_path, 'lidar'), os.path.join(training_path, 'velodyne'), lidar_tr)
 
     os.symlink(
-        os.path.join(source_path, 'lidar'),
+        os.path.join(training_path, 'velodyne'),
         os.path.join(testing_path, 'velodyne')
     )
 
@@ -190,14 +214,52 @@ def create_radar(source_path, target_path):
         os.path.join(testing_path, 'label_2')
     )
 
-
+def create_attach(source_path, target_path):
+    radar_path = os.path.join(target_path, 'radar')
+    if not os.path.exists(radar_path):
+        os.makedirs(radar_path)
+    radar_training_path = os.path.join(radar_path, 'training')
+    if not os.path.exists(radar_training_path):
+        os.makedirs(radar_training_path)
+    
+    lidar_path = os.path.join(target_path, 'lidar')
+    if not os.path.exists(radar_path):
+        os.makedirs(radar_path)
+    lidar_training_path = os.path.join(lidar_path, 'training')
+    if not os.path.exists(lidar_training_path):
+        os.makedirs(lidar_training_path)
+    
+    os.symlink(
+        os.path.join(source_path, 'radar'),
+        os.path.join(lidar_training_path, 'attach_lidar')
+    )
+    
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(lidar_training_path, 'attach_calib')
+    )
+    
+    os.symlink(
+        os.path.join(source_path, 'lidar'),
+        os.path.join(radar_training_path, 'attach_lidar')
+    )
+    
+    os.symlink(
+        os.path.join(source_path, 'calib'),
+        os.path.join(radar_training_path, 'attach_calib')
+    )
+    
 def main():
     print('start')
-    source_path = '/mnt/12T/hantao/shangqi/kitti_format'
+    # source_path = '/mnt/12T/hantao/shangqi/kitti_format'
     in_house_label_path = '/mnt/12T/hantao/shangqi/inhouse_labels'
-    target_path = '/mnt/12T/hantao/shangqi/inhouse_final_in_kitti'
+    # target_path = '/mnt/12T/hantao/shangqi/inhouse_final_in_kitti'
+    source_path = '/mnt/12T/hantao/shangqi_new/kitti_format'
+    # in_house_label_path = '/mnt/12T/hantao/shangqi_new/inhouse_labels'
+    target_path = '/mnt/12T/hantao/shangqi_new/inhouse_final_in_kitti'
     create_lidar(source_path, in_house_label_path, target_path)
     create_radar(source_path, target_path)
+    create_attach(source_path, target_path)
 
 if __name__ == '__main__':
     main()
