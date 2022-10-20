@@ -9,7 +9,7 @@ from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
 from tqdm import tqdm
 from vod.visualization.settings import label_color_palette_2d
-
+from scipy.spatial.transform import Rotation as R
 
 
 def transform_anno(loc, frame_id, is_radar=True, is_test=False):
@@ -130,7 +130,7 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends
         ax.add_patch(rec)
 
     # legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
-    legend_elements = [Patch(facecolor='white', edgecolor='blue', label='DT'), Patch(facecolor='white', edgecolor='red', label='GT')]
+    legend_elements = [Patch(facecolor='white', edgecolor='blue', label='Pred'), Patch(facecolor='white', edgecolor='red', label='GT')]
     if centers is not None:
         legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
                           markerfacecolor='r', markersize=10)]
@@ -144,15 +144,40 @@ def draw_rectangle(ax, anno, color_dict, xz=False):
     for rec in recs:
         ax.add_patch(rec)
 
+def draw_point_cloud(ax, pc, c='black',s=0.1):
+    ax.scatter(pc[:, 0], pc[:, 1], c=c, s=s)
+
+def get_matrix_from_ext(ext):
+    rot = R.from_euler('ZYX', ext[3:], degrees=True)
+    rot_m = rot.as_matrix()
+    x, y, z = ext[:3]
+    tr = np.eye(4)
+    tr[:3,:3] = rot_m
+    tr[:3, 3] = np.array([x, y, z]).T
+    return tr
 
 if __name__ == '__main__':
     
     # cls_name = ['Car','Pedestrian', 'Cyclist', 'Others']
     cls_name = ['Car','Truck']
     
+    # lidar pointcloud path
+    lidar_pc_path = P('/root/hantao/CenterPoint-KITTI/data/shangqi_new_lidar/training/velodyne')
+    
+    # radar pointcloud path
+    radar_pc_path = P('/root/hantao/CenterPoint-KITTI/data/shangqi_new_radar/training/velodyne')
 
     # CHANGE PATH 
-    root_path = P('/root/hantao/CenterPoint-KITTI/output/pointpillar_inhouse_new_lidar/initial_pct_0401/eval/checkpoint_epoch_40')
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/pointpillar_inhouse_new_lidar/initial_pct_0401/eval/checkpoint_epoch_80')
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/CFAR-lidar-new-inhouse/initial_pct_0401/eval/checkpoint_epoch_20')
+
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/pointpillar_inhouse_new_radar/initial_pct_0401/eval/checkpoint_epoch_80')
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/IA-SSD-new-inhouse-radar/initial_pct_0401/eval/checkpoint_epoch_69')
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/CFAR-radar-new-inhouse/initial_pct_0401/eval/checkpoint_epoch_4')
+
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/pointpillar_inhouse_new_lidar/initial_pct_0401/eval/checkpoint_epoch_74')
+    # root_path = P('/root/hantao/CenterPoint-KITTI/output/IA-SSD-new-inhouse-lidar/initial_pct_0401/eval/checkpoint_epoch_75')
+    root_path = P('/root/hantao/CenterPoint-KITTI/output/CFAR-lidar-new-inhouse/initial_pct_0401/eval/checkpoint_epoch_17')
     color_dict = {}
 
     gt_save_dir = root_path / 'GT_all_bev'
@@ -199,8 +224,24 @@ if __name__ == '__main__':
         # ax.clear()
         
         # draw pred
-        drawBEV(ax, None,None, dt[id], color_dict, id, 'pred')
+        title = str(root_path).split('/')[-4]
+        drawBEV(ax, None,None, dt[id], color_dict, id, title)
         # drawBEV(ax, points[id], centers_origin[id], dt[id], color_dict, id, 'pred')
+
+        pc_bin = str(lidar_pc_path/(id + '.bin'))
+        pc = np.fromfile(str(pc_bin), dtype=np.float32).reshape(-1, 4)
+        # pc = pc[:, :3]
+        # lidar_ext = [-2.5, 0, 2.03, 4.9, -1.5, 0]
+        # lidar_tr = get_matrix_from_ext(lidar_ext)
+        # pc = np.hstack((pc, np.ones((pc.shape[0], 1),dtype=np.float32)))
+        # pc = np.dot(pc, lidar_tr.T)
+        # pc = pc[:, :3]
+        draw_point_cloud(ax, pc)
+        
+        pc_bin = str(radar_pc_path/(id + '.bin'))
+        pc = np.fromfile(str(pc_bin), dtype=np.float32).reshape(-1, 6)
+        draw_point_cloud(ax, pc, c='green',s=2.0)
+
         pred_img_full_fname = str(pred_save_dir / img_fname)
         plt.xlim(-0,75)
         plt.ylim(-30,30)
