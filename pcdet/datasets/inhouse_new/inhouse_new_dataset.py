@@ -98,20 +98,18 @@ class InhouseNewDataset(DatasetTemplate):
     def get_attach_radar(self, idx):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
-        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
-        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x', 'y', 'z', 'fSpeed', 'fPower', 'fRCS'])
+        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 6)
         
         assert lidar_file.exists()
         
         idx = [0,1,2]
-        if 'RCS' in used_feature_list:
+        if 'fSpeed' in used_feature_list:
             idx += [3]
-        if 'v_r' in used_feature_list:
+        if 'fPower' in used_feature_list:
             idx += [4]
-        if 'v_r_compensated' in used_feature_list:
+        if 'fRCS' in used_feature_list:
             idx += [5]
-        if 'time' in used_feature_list:
-            idx += [6]
         idx = np.array(idx)
         
         if self.block_point_cloud_features:
@@ -124,7 +122,7 @@ class InhouseNewDataset(DatasetTemplate):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         # print(lidar_file)
         assert lidar_file.exists()
-        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 6)
         if self.block_point_cloud_features:
             radar_point_cloud[:, 3:] = 0
         return radar_point_cloud
@@ -147,7 +145,7 @@ class InhouseNewDataset(DatasetTemplate):
     def get_attach_calib(self, idx):
         calib_file = self.root_split_path / 'attach_calib' / ('%s.txt' % idx)
         assert calib_file.exists()
-        return calibration_kitti.Calibration(calib_file)
+        return calibration_kitti.Calibration(calib_file, mode='inhouse')
 
     def get_road_plane(self, idx):
         plane_file = self.root_split_path / 'planes' / ('%s.txt' % idx)
