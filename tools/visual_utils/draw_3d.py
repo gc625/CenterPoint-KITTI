@@ -19,7 +19,9 @@ from vod.visualization import Visualization3D
 from skimage import io
 from vis_tools import fov_filtering, make_vid
 from glob import glob
+from collections import Counter
 import matplotlib.cm as cm
+import os
 # from vis_tools import fov_filtering
 
 
@@ -80,24 +82,24 @@ def vod_to_o3d(vod_bbx,vod_calib):
 
     box_list = []
     for box in vod_bbx:
-        
-        # Conver to lidar_frame 
-        # NOTE: O3d is stupid and plots the center of the box differently,
-        offset = -(box['h']/2) 
-        old_xyz = np.array([[box['x'],box['y']+offset,box['z']]])
-        xyz = transform_pcl(old_xyz,vod_calib.t_lidar_camera)[0,:3] #convert frame
-        extent = np.array([[box['l'],box['w'],box['h']]])
-        
-        # ROTATION MATRIX
-        rot = -(box['rotation']+ np.pi / 2) 
-        angle = np.array([0, 0, rot])
-        rot_matrix = R.from_euler('XYZ', angle).as_matrix()
-        
-        # CREATE O3D OBJECT
-        obbx = o3d.geometry.OrientedBoundingBox(xyz, rot_matrix, extent.T)
-        obbx.color = COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) # COLOR
-        
-        box_list += [obbx]
+        if box['label_class'] in ['Cyclist','Pedestrian','Car']:
+            # Conver to lidar_frame 
+            # NOTE: O3d is stupid and plots the center of the box differently,
+            offset = -(box['h']/2) 
+            old_xyz = np.array([[box['x'],box['y']+offset,box['z']]])
+            xyz = transform_pcl(old_xyz,vod_calib.t_lidar_camera)[0,:3] #convert frame
+            extent = np.array([[box['l'],box['w'],box['h']]])
+            
+            # ROTATION MATRIX
+            rot = -(box['rotation']+ np.pi / 2) 
+            angle = np.array([0, 0, rot])
+            rot_matrix = R.from_euler('XYZ', angle).as_matrix()
+            
+            # CREATE O3D OBJECT
+            obbx = o3d.geometry.OrientedBoundingBox(xyz, rot_matrix, extent.T)
+            obbx.color = COLOR_PALETTE.get(box['label_class'],COLOR_PALETTE['Others']) # COLOR
+            
+            box_list += [obbx]
 
     return box_list
 
@@ -177,7 +179,9 @@ def get_visualization_data(kitti_locations,dt_path,frame_id,is_test_set):
     vis_dict = {
         'radar_pcd': [radar_pcd],
         'lidar_pcd': [lidar_pcd],
+        'vod_predictions': vod_preds,
         'o3d_predictions': o3d_predictions,
+        'vod_labels': vod_labels,
         'o3d_labels': o3d_labels,
         'frame_id': frame_ids[frame_id]
     }
@@ -343,12 +347,12 @@ def main():
     resolution_dict = {
         '720': [720, 1280]
     }
-    resolution = '720'
+    resolution = '1080'
     is_test_set = False
-    tag = 'CFAR_lidar_rcsv'
-    CAMERA_POS_PATH = 'test_pos.json'
+    tag = 'CFAR_lidar_rcs'
+    CAMERA_POS_PATH = 'test_pos2.json'
     output_name = tag+'_testset' if is_test_set else tag 
-    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution)
+    OUTPUT_IMG_PATH = base_path /'output' / 'vod_vis' / 'vis_video' /  (output_name + resolution+"_new")
     #--------------------------------------------------------------------------------
 
     OUTPUT_IMG_PATH.mkdir(parents=True,exist_ok=True)
@@ -377,29 +381,136 @@ def main():
 
     # vis_all_frames(
     #     kitti_locations,
-    #     test_dt_path,
+    #     vis_path,
     #     CAMERA_POS_PATH,
     #     OUTPUT_IMG_PATH,
-    #     plot_radar_pcd=True,
-    #     plot_lidar_pcd=False,
+    #     plot_radar_pcd=False,
+    #     plot_lidar_pcd=True,
     #     plot_labels=False,
     #     plot_predictions=True,
     #     is_test_set=is_test_set)
 
+    # tag_list = ['CFAR_lidar_rcs','lidar_i']
+    # dt_paths = get_paths(base_path,path_dict,tag_list)
+    # compare_models(kitti_locations,dt_paths)
 
+    counter_path = '/root/gabriel/code/parent/CenterPoint-KITTI/detection_counters.npy'
+    frame_id_path = '/root/gabriel/code/parent/CenterPoint-KITTI/frame_ids_np.npy'
+    k = 20
+    print(f'top {k} frames where model 1 is closer to GT compared to model 2')
+    frames = analyze_models(counter_path,frame_id_path,20)
+    print(frames)
+
+    gt_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarGT'
+    det_path_1 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_lidar_rcs1080_new/LidarPred'
+    det_path_2 = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/lidar_i1080_new/LidarPred'
+    output_path = base_path /'output' / 'vod_vis' / 'detection_comparisons'
+    gather_frames(frames,det_path_1,det_path_2,gt_path,output_path)
+
+
+
+
+    # TODO: put this into a function 
+    # test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/RadarPred'
+    # save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/CFAR_radar_testset_spring.mp4'
+    # dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
+    # make_vid(dt_imgs, save_path, fps=15)
+
+
+
+
+#%%
+def gather_frames(frame_ids,det_path1,det_path2,gt_path,output_path):
+
+    print('')    
+
+    for frame in frame_ids:
+        path = output_path / str(frame)
+        os.makedirs(path,exist_ok=True)
+        img1 = det_path1 + f"/{str(frame).zfill(5)}.png"
+        img2 = det_path2 + f"/{str(frame).zfill(5)}.png"
+        gt = det_path1 + f"/{str(frame).zfill(5)}.png"
+        
+        os.symlink(img1,path / P(str(P(det_path1).parents[0].stem)+".png"))
+        os.symlink(img2,path / P(str(P(det_path2).parents[0].stem)+".png"))
+        os.symlink(gt,path / P("gt.png"))
+
+
+
+
+
+
+
+
+
+def analyze_models(counter_path,frame_id_path,k):
+
+    counter = np.load(counter_path)
+    frame_ids = np.load(frame_id_path)
+
+    model_counts = counter[:,:-1,:]
+    gt_count = counter[:,-1,:]
+
+    repeated_gt = np.repeat(np.expand_dims(gt_count,axis=1),model_counts.shape[1],axis=1)
+    abs_diff = np.abs(repeated_gt-model_counts)
+    difference_to_gt = np.sum(abs_diff,axis=2)
+
+    relative_diff = np.abs(difference_to_gt[:,0]-difference_to_gt[:,1])
+    ind = np.argpartition(relative_diff, -k)[-k:]
+
+    return frame_ids[ind]
+
+def get_paths(base_path,path_dict,tag_list):
+    dt_paths = []
+    for tag in tag_list:
+        detection_result_path = base_path / path_dict[tag]
+        dt_path = str(detection_result_path / 'result.pkl')   
+        dt_paths += [dt_path]
+    return dt_paths
+
+def compare_models(
+    kitti_locations,
+    dt_paths,
+    is_test_set = False):
 
     
-    # TODO: put this into a function 
-    test_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/RadarPred'
-    save_path = '/root/gabriel/code/parent/CenterPoint-KITTI/output/vod_vis/vis_video/CFAR_radar_testset_spring/CFAR_radar_testset_spring.mp4'
-    dt_imgs = sorted(glob(str(P(test_path)/'*.png')))
-    make_vid(dt_imgs, save_path, fps=15)
+    sample_dt = dt_paths[0]
+    pred_dict = get_pred_dict(sample_dt)
+    frame_ids = list(pred_dict.keys())
+    
+    # 1296 x num_models x 3:(car,ped,cyclist) 
+    counter = np.zeros((len(frame_ids),len(dt_paths)+1,3))
+    name_to_int = {'Car':0,'Pedestrian':1,'Cyclist':2}
+    frame_ids_np = np.array([int(f) for f in frame_ids])
+
+    for i in tqdm(range(len(frame_ids))):
+        for j,dt_path in enumerate(dt_paths):
+            vis_dict = get_visualization_data(kitti_locations,dt_path,i,is_test_set)
+            detected_classes = [v['label_class'] for v in vis_dict['vod_predictions']]
+            class_counter = Counter(detected_classes)
+            for c in class_counter:
+                counter[i][j][name_to_int[c]] = class_counter[c]
+                # print("")
+
+        gt_labels= [v['label_class'] for v in vis_dict['vod_labels'] if v['label_class'] in ['Car','Pedestrian','Cyclist']]
+        gt_counter = Counter(gt_labels)
+        for c in gt_counter:
+                counter[i][-1][name_to_int[c]] = gt_counter[c]
+    
+    
+    with open('detection_counters.npy', 'wb') as f:
+        np.save(f,counter)
+
+    with open('frame_ids_np.npy', 'wb') as f:
+        np.save(f,frame_ids_np)
+
+
 
 #%%
 if __name__ == "__main__":
-
+    # RUN THESE COMMANDS FIRST
     # source py3env/bin/activate
-    #export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"
+    # export PYTHONPATH="${PYTHONPATH}:/root/gabriel/code/parent/CenterPoint-KITTI"
     main()
 
 # %%
