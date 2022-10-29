@@ -135,6 +135,10 @@ def get_2d_label_corners(labels: FrameLabels, transformations_matrix: FrameTrans
         corners_img = corners_img.tolist()
         distance = np.linalg.norm((label['x'], label['y'], label['z']))
 
+        if np.max(corners_img)-np.min(corners_img) > 10000:
+            print('Error: Skipping index=%s Label because it is too close' % index)
+            continue
+
         bboxes.append({'label_class': label['label_class'],
                        'corners': corners_img,
                        'score': label['score'],
