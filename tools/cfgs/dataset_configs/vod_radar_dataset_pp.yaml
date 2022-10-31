@@ -51,8 +51,8 @@ DATA_AUGMENTOR:
 
 
 POINT_FEATURE_ENCODING: {
-    encoding_type: with_spherical,
-    used_feature_list: ['x', 'y', 'z', 'RCS'],
+    encoding_type: absolute_coordinates_encoding,
+    used_feature_list: ['x', 'y', 'z', 'RCS', 'v_r_compensated'],
     src_feature_list: ['x', 'y', 'z', 'RCS', 'v_r', 'v_r_compensated', 'time'] 
 }
 
@@ -68,7 +68,7 @@ DATA_PROCESSOR:
       }
     # [0.16, 0.16, 5]
     - NAME: transform_points_to_voxels
-      VOXEL_SIZE:  [0.05, 0.05, 0.1]
+      VOXEL_SIZE:  [0.16, 0.16, 5]
       MAX_POINTS_PER_VOXEL: 10
       MAX_NUMBER_OF_VOXELS: {
         'train': 16000,
