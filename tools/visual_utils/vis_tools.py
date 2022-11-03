@@ -322,8 +322,6 @@ def make_parallel_vid(imgs1, imgs2, name1, name2, vid_fname, fps=15):
         textY2 = int((white_bg.shape[0] + textsize2[1]) / 2) + int(h*1)
         complete_img = cv2.putText(complete_img, name1, (textX1, textY1), font, fontScale, font_color, thickness)
         complete_img = cv2.putText(complete_img, name2, (textX2, textY2), font, fontScale, font_color, thickness)
-        cv2.imshow('complete_img', complete_img)
-        cv2.waitKey(1)
         out.write(complete_img)
         print(complete_img.shape)
     out.release()
