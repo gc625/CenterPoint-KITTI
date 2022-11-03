@@ -285,6 +285,49 @@ def make_vid(imgs, vid_fname, fps=15):
         out.write(i)
     out.release()
 
+def make_parallel_vid(imgs1, imgs2, name1, name2, vid_fname, fps=15):
+    print('=================== making videos ===================')
+    # beauty adjustment here
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_color = (0, 0, 255)
+    fontScale = 1
+    thickness = 2
+    out = None
+    assert len(imgs1) == len(imgs2)
+    for i in range(len(imgs1)):
+        try:
+            im1 = cv2.imread(imgs1[i])
+        except:
+            im1 = cv2.imread(str(imgs1[i]))
+        try:
+            im2 = cv2.imread(imgs2[i])
+        except:
+            im2 = cv2.imread(str(imgs2[i]))
+        h, w, _ = im1.shape
+        if out is None:
+            size = (w*2, int(h*1.2))
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+            out = cv2.VideoWriter(str(vid_fname), fourcc, fps, size)
+        # im1 = cv2.putText(im1, name1, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        # im2 = cv2.putText(im2, name2, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+        complete_img = np.concatenate((im1, im2), axis=1)
+        color = (0, 0, 0)  # background color
+        white_bg = np.full((int(h*0.2), int(w*2), 3), color, np.uint8)
+        complete_img = np.concatenate((complete_img, white_bg), axis=0)
+        textsize1 = cv2.getTextSize(name1, font, fontScale, thickness)[0]
+        textsize2 = cv2.getTextSize(name2, font, fontScale, thickness)[0]
+        textX1 = int((white_bg.shape[1] - textsize1[0]) / 2) - int(w*.5)
+        textX2 = int((white_bg.shape[1] - textsize2[0]) / 2) + int(w*.5)
+        textY1 = int((white_bg.shape[0] + textsize1[1]) / 2) + int(h*1)
+        textY2 = int((white_bg.shape[0] + textsize2[1]) / 2) + int(h*1)
+        complete_img = cv2.putText(complete_img, name1, (textX1, textY1), font, fontScale, font_color, thickness)
+        complete_img = cv2.putText(complete_img, name2, (textX2, textY2), font, fontScale, font_color, thickness)
+        cv2.imshow('complete_img', complete_img)
+        cv2.waitKey(1)
+        out.write(complete_img)
+        print(complete_img.shape)
+    out.release()
+
 def get_label(label_file):
     return object3d_kitti.get_objects_from_label(label_file)
 
