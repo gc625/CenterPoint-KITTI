@@ -238,7 +238,7 @@ class QueryAndGroup(nn.Module):
         super().__init__()
         self.radius, self.nsample, self.use_xyz = radius, nsample, use_xyz
 
-    def forward(self, xyz: torch.Tensor, new_xyz: torch.Tensor, features: torch.Tensor = None) -> Tuple[torch.Tensor]:
+    def forward(self, xyz: torch.Tensor, new_xyz: torch.Tensor, features: torch.Tensor = None, save_abs_coord=False) -> Tuple[torch.Tensor]:
         """
         :param xyz: (B, N, 3) xyz coordinates of the features
         :param new_xyz: (B, npoint, 3) centroids
@@ -248,8 +248,8 @@ class QueryAndGroup(nn.Module):
         """
         idx = ball_query(self.radius, self.nsample, xyz, new_xyz)
         xyz_trans = xyz.transpose(1, 2).contiguous()
-        grouped_xyz = grouping_operation(xyz_trans, idx)  # (B, 3, npoint, nsample)
-        grouped_xyz -= new_xyz.transpose(1, 2).unsqueeze(-1)
+        grouped_xyz_abs = grouping_operation(xyz_trans, idx)  # (B, 3, npoint, nsample)
+        grouped_xyz = grouped_xyz_abs - new_xyz.transpose(1, 2).unsqueeze(-1) # relative pose instead of absolute coordinate
 
         if features is not None:
             grouped_features = grouping_operation(features, idx)
@@ -260,7 +260,8 @@ class QueryAndGroup(nn.Module):
         else:
             assert self.use_xyz, "Cannot have not features and not use xyz as a feature!"
             new_features = grouped_xyz
-
+        if save_abs_coord:
+            new_features = torch.cat([new_features, grouped_xyz_abs], dim=1)
         return new_features
 
 

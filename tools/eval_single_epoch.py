@@ -144,6 +144,7 @@ def main():
     if args.pretrained_model is not None:
         model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
+    setattr(model, 'vis', False)
 
     model_mem_usage = torch.cuda.memory_allocated(torch.device('cuda'))
     
@@ -193,25 +194,6 @@ def main():
     # -----------------------start training---------------------------
     logger.info('**********************Start training %s/%s(%s)**********************'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
-    # train_model(
-    #     model,
-    #     optimizer,
-    #     train_loader,
-    #     model_func=model_fn_decorator(),
-    #     lr_scheduler=lr_scheduler,
-    #     optim_cfg=cfg.OPTIMIZATION,
-    #     start_epoch=start_epoch,
-    #     total_epochs=args.epochs,
-    #     start_iter=it,
-    #     rank=cfg.LOCAL_RANK,
-    #     tb_log=tb_log,
-    #     ckpt_save_dir=ckpt_dir,
-    #     train_sampler=train_sampler,
-    #     lr_warmup_scheduler=lr_warmup_scheduler,
-    #     ckpt_save_interval=args.ckpt_save_interval,
-    #     max_ckpt_save_num=args.max_ckpt_save_num,
-    #     merge_all_iters_to_one_epoch=args.merge_all_iters_to_one_epoch
-    # )
 
     logger.info('**********************End training %s/%s(%s)**********************\n\n\n'
                 % (cfg.EXP_GROUP_PATH, cfg.TAG, args.extra_tag))
@@ -221,7 +203,7 @@ def main():
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
-        batch_size=2,
+        batch_size=1,
         dist=dist_train, workers=args.workers, logger=logger, training=False
     )
 
@@ -230,7 +212,8 @@ def main():
     eval_output_dir.mkdir(parents=True, exist_ok=True)
     eval_single_ckpt(model, test_loader, args, \
     eval_output_dir, logger=logger, epoch_id=args.epochs, \
-    reload=False, save_to_file=args.save_to_file,result_dir=args.result_dir)
+    reload=False, save_to_file=args.save_to_file,\
+        result_dir=args.result_dir, save_centers=False)
     # args.start_epoch = max(args.epochs - 10, 0)  # Only evaluate the last 10 epochs
 
     # repeat_eval_ckpt(

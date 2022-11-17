@@ -21,15 +21,15 @@ Constructor which based on a few parameters defines the locations of possible da
 
         # Automatically defined variables. The location of sub-folders can be customized here.
         # Current definitions are based on the recommended locations.
-        self.camera_dir = os.path.join(self.root_dir, 'lidar', 'training', 'image_2')
+        self.camera_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'image_2')
 
-        self.lidar_dir = os.path.join(self.root_dir, 'lidar', 'training', 'velodyne')
-        self.lidar_calib_dir = os.path.join(self.root_dir, 'lidar', 'training', 'calib')
+        self.lidar_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'velodyne')
+        self.lidar_calib_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'calib')
 
-        self.radar_dir = os.path.join(self.root_dir, 'radar', 'training', 'velodyne')
-        self.radar_calib_dir = os.path.join(self.root_dir, 'radar', 'training', 'calib')
+        self.radar_dir = os.path.join(self.root_dir, 'vod_radar', 'training', 'velodyne')
+        self.radar_calib_dir = os.path.join(self.root_dir, 'vod_radar', 'training', 'calib')
 
-        self.pose_dir = os.path.join(self.root_dir, 'lidar', 'training', 'pose')
-        self.pose_calib_dir = os.path.join(self.root_dir, 'lidar', 'training', 'calib')
+        self.pose_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'pose')
+        self.pose_calib_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'calib')
 
-        self.label_dir = os.path.join(self.root_dir, 'lidar', 'training', 'label_2')
+        self.label_dir = os.path.join(self.root_dir, 'vod_lidar', 'training', 'label_2')

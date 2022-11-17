@@ -27,7 +27,9 @@ class IASSD_GAN(Detector3DTemplate):
         self.class_names = model_cfg.get('CLASS_NAMES', None)
         self.vis_cnt = 0 
         self.vis_interval = 100 # in unit batch
+        
         self.debug = self.model_cfg.get('DEBUG', False)
+        # ipdb.set_trace()
         self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
         self.attach_model_cfg.BACKBONE_3D['num_class'] = num_class
         if model_cfg.get('DISABLE_ATTACH'):
@@ -75,10 +77,11 @@ class IASSD_GAN(Detector3DTemplate):
 
 
     def forward(self, batch_dict):
-        if self.use_feature_aug & self.training:
-            if self.attach_model is not None:
-                transfer_dict = self.get_transfer_feature(batch_dict)
-                batch_dict['att'] = transfer_dict
+        if self.use_feature_aug:
+            if self.training or self.debug:
+                if self.attach_model is not None:
+                    transfer_dict = self.get_transfer_feature(batch_dict)
+                    batch_dict['att'] = transfer_dict
         for cur_module in self.module_list:
             batch_dict = cur_module(batch_dict)
         # for i in range(self.full_len):
@@ -127,16 +130,48 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             
             pred_dicts, recall_dicts = self.post_processing(batch_dict)
+            # ipdb.set_trace()
             if self.debug:
                 loss, tb_dict, disp_dict = self.get_training_loss()
                 transfer_loss = self.get_transfer_loss(batch_dict)
                 batch_dict['sa_ins_labels'] = tb_dict['sa_ins_labels']
-                # selected lidar points
-                # selected lidar points labels
-                # radar points labels
-                # radar points classification
-                pass
-            # recall_dicts['batch_dict'] = batch_dict
+                batch_dict['transfer_loss'] = transfer_loss
+                # run backward for matching loss
+                # 1. get attach(lidar) pooling weights
+                # pts_dict = tb_dict['pts_dict']
+                # attach_pts = pts_dict['cross_pts']
+                # self_pts = pts_dict['self_pts']
+
+                loss.backward()
+                # self.attach_model()
+                bb = self.attach_model.SA_modules
+                attach_grad_dict = {}
+                for m_name, m in bb.named_modules():
+                    if 'pool_weights' in m_name:
+                        try:
+                            pw_grad = m.weights.grad.detach().cpu().numpy()
+                            attach_grad_dict[m_name] = pw_grad
+                        except:
+                            pass
+
+                        
+
+                    # 2. get main(radar) pooling weights
+                    main_grad_dict = {}
+                    bb = self.backbone_3d
+                    for m_name, m in bb.named_modules():
+                        if 'pool_weights' in m_name:
+                            try:
+                                pw_grad = m.weights.grad.detach().cpu().numpy()
+                                main_grad_dict[m_name] = pw_grad
+                            except:
+                                pass
+                    # save grad of pooling weights for all layer 
+                    pass
+                # recall_dicts['batch_dict'] = batch_dict
+                
+                    pred_dicts[0]['attach_pw_dict'] = attach_grad_dict
+                    pred_dicts[0]['main_pw_dict'] = main_grad_dict
             return pred_dicts, recall_dicts
 
     def build_feature_aug(self, model_info_dict, custom_cfg=None):
@@ -149,7 +184,7 @@ class IASSD_GAN(Detector3DTemplate):
         else:
             num_point_features = model_info_dict['num_point_features'] # ====> this was changed by backbone3d
 
-        feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
+        # feature_aug_cfg = self.model_cfg if custom_cfg is None else custom_cfg
 
         # model_info_dict['num_point_features'] =====> change this for detection head
 
@@ -336,7 +371,8 @@ class IASSD_GAN(Detector3DTemplate):
     def get_transfer_feature(self, batch_dict):
         attach_dict = {
             'points': torch.clone(batch_dict['attach']),
-            'batch_size': batch_dict['batch_size']
+            'batch_size': batch_dict['batch_size'],
+            'frame_id': batch_dict['frame_id']
         }
         # torch.clone(batch_dict)
         # attach_dict['points'] = attach_dict['attach']
@@ -362,9 +398,9 @@ class IASSD_GAN(Detector3DTemplate):
             'att': attach_dict,
             'batch': batch_dict
         }
-        if self.cross_over_cfg is None:
-            transfer_loss = self.transfer(transfer_dict)
-        elif self.feature_aug is not None:
+        # if self.cross_over_cfg is None:
+        #     transfer_loss = self.transfer(transfer_dict)
+        if self.use_feature_aug:
             # feature matching loss is already calculated in get_training_loss(), 
             # here we only calculate the shared_det_loss
             radar_shared_feat = batch_dict['radar_shared']
@@ -422,7 +458,7 @@ class IASSD_GAN(Detector3DTemplate):
     def build_shared_head(self):
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
+            'num_rawpoint_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
             'num_point_features': self.model_cfg.SHARED_HEAD.NUM_POINT_FEATURES,
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
@@ -444,8 +480,8 @@ class IASSD_GAN(Detector3DTemplate):
     def build_attach_network(self):
         model_info_dict = {
             'module_list': [],
-            'num_rawpoint_features': 4,
-            'num_point_features': 4,
+            'num_rawpoint_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
+            'num_point_features': self.attach_model_cfg.get('NUM_POINT_FEATURES'),
             'grid_size': self.dataset.grid_size,
             'point_cloud_range': self.dataset.point_cloud_range,
             'voxel_size': self.dataset.voxel_size,
@@ -463,7 +499,7 @@ class IASSD_GAN(Detector3DTemplate):
         if not os.path.isfile(filename):
             raise FileNotFoundError
 
-        logger.info('==> Loading parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
+        logger.info('==> Loading attach parameters from checkpoint %s to %s' % (filename, 'CPU' if to_cpu else 'GPU'))
         loc_type = torch.device('cpu') if to_cpu else None
         checkpoint = torch.load(filename, map_location=loc_type)
         model_state_disk = checkpoint['model_state']
@@ -498,15 +534,23 @@ class IASSD_GAN(Detector3DTemplate):
 
     def get_training_loss(self):
         disp_dict = {}
-        loss_point, tb_dict = self.point_head.get_loss()
-        loss_match, new_tb_dict = self.feature_aug.get_loss()
+        if self.debug:
 
-        # get loss from shared_det_head
+            loss_match, pts_dict = self.feature_aug.get_loss(self.debug)
+            loss_point, tb_dict = self.point_head.get_loss()
+            tb_dict['pts_dict'] = pts_dict
+            return loss_match, tb_dict, disp_dict
+        else:
+            loss_point, tb_dict = self.point_head.get_loss()
+            loss_match, new_tb_dict = self.feature_aug.get_loss()
+
+            # get loss from shared_det_head
 
 
-        tb_dict.update(new_tb_dict)
-        loss = loss_point + loss_match
-        return loss, tb_dict, disp_dict
+            tb_dict.update(new_tb_dict)
+            loss = (2/3) * loss_point + (1/3) * loss_match
+            return loss, tb_dict, disp_dict
+        
 
 class feat_gan(nn.Module):
     def __init__(self, mlps, nsample, transfer_layer, contrastive=True):
@@ -822,6 +866,8 @@ class FeatureAug(nn.Module):
         self.model_cfg = model_cfg
         # self.input_channel = input_channels # exact number of the center feature vector
         # self.output_channel = 
+        self.debug = model_cfg.get('DEBUG', False)
+        # ipdb.set_trace()
         self.relu = self.model_cfg.get('RELU', True)
         self.bn = self.model_cfg.get('BN', True)
         self.mlps = self.model_cfg.get('MLPS', [448, 384, 320, 256])
@@ -830,6 +876,7 @@ class FeatureAug(nn.Module):
         self.lidar_shared_mlp = CrossOverBlock(self.mlps, self.channel_in, relu=self.relu, bn=self.bn)
         self.radar_shared_mlp = CrossOverBlock(self.mlps, self.channel_in, relu=self.relu, bn=self.bn)
         self.forward_dict = {}
+        self.use_centroid = model_cfg.get('USE_CENTROID', True)
     
     def forward(self, x):
         batch_dict = x
@@ -839,7 +886,7 @@ class FeatureAug(nn.Module):
         shared_radar = self.radar_shared_mlp(radar_feat)
         # replace the feature or fuse it back
         # don't run this during evaluation
-        if self.training:
+        if self.training or self.debug:
             attach_dict = x['att']
 
             att_feats = attach_dict['encoder_features']
@@ -857,8 +904,9 @@ class FeatureAug(nn.Module):
                 raise RuntimeError('Nan occurs in domain cross over!')
         
             shared_lidar = self.lidar_shared_mlp(lidar_feat) # [B, C, N]
-
-        if self.training:
+        # import ipdb 
+        # ipdb.set_trace()
+        if self.training or self.debug:
             self.forward_dict['batch_size'] = batch_dict['batch_size']
             self.forward_dict['lidar_original'] = lidar_feat
             self.forward_dict['radar_original'] = radar_feat
@@ -868,6 +916,8 @@ class FeatureAug(nn.Module):
             self.forward_dict['radar_xyz'] = radar_xyz
             self.forward_dict['lidar_centers'] = attach_dict['centers']
             self.forward_dict['radar_centers'] = batch_dict['centers']
+            self.forward_dict['lidar_centers_origin'] = attach_dict['centers_origin']
+            self.forward_dict['radar_centers_origin'] = batch_dict['centers_origin']
 
             batch_dict['radar_shared'] = shared_radar
         # cat augmented feature to the original feature 'centers_features'
@@ -883,7 +933,7 @@ class FeatureAug(nn.Module):
         features = (pc[:, 4:].contiguous() if pc.size(-1) > 4 else None)
         return batch_idx, xyz, features
 
-    def get_loss(self):
+    def get_loss(self, debug=False):
         # lidar_original = self.forward_dict['lidar_original']
         # radar_original = self.forward_dict['radar_original']
         # lidar_recover = self.forward_dict['lidar_recover']
@@ -901,15 +951,26 @@ class FeatureAug(nn.Module):
         radar_shared_feat = self.forward_dict['radar_shared'].permute(0,2,1)
         # lidar_xyz = x['lidar_xyz']
         # radar_xyz = x['radar_xyz']
-        lidar_xyz = lidar_center
-        radar_xyz = radar_center    
+        _, lidar_origin, _ = self.break_up_pc(self.forward_dict['lidar_centers_origin'])
 
+        _, radar_origin, _ = self.break_up_pc(self.forward_dict['radar_centers_origin'])
+        lidar_origin = lidar_origin.view(batch_size, -1, 3)
+        radar_origin = radar_origin.view(batch_size, -1, 3)
+
+        if self.use_centroid:
+            lidar_xyz = lidar_center
+            radar_xyz = radar_center    
+        else:
+            lidar_xyz = lidar_origin        
+            radar_xyz = radar_origin
         # rec_lidar_loss = nn.functional.mse_loss(lidar_original, lidar_recover, reduction='mean')
         # rec_radar_loss = nn.functional.mse_loss(radar_original, radar_recover, reduction='mean')
         # # # recover loss
         # rec_loss = (rec_lidar_loss + rec_radar_loss)/2
         
         # matching loss
+        # import ipdb
+        # ipdb.set_trace()
         self_idx, _ = df.ball_point(1, radar_xyz, radar_xyz, 1)
         cross_idx, mask = df.ball_point(1, lidar_xyz, radar_xyz, 1) # this should get the one and only result
         mask = mask.unsqueeze(-1).unsqueeze(-1)
@@ -937,7 +998,14 @@ class FeatureAug(nn.Module):
         tb_dict = {
             'matching_loss': matching_loss.item()
         }
-        return matching_loss, tb_dict
+        if debug:
+            pts_dict = {
+                'self_pts':self_pts,
+                'cross_pts': cross_pts
+            }
+            return matching_loss, pts_dict
+        else:
+            return matching_loss, tb_dict
 # def get_domain_cross_loss(self, x):
 #         lidar_original = x['lidar_original']
 #         radar_original = x['radar_original']

@@ -1,105 +1,5 @@
-# # ARG PYTORCH="1.7.1"
-# # ARG CUDA="11.0"
-# # ARG CUDNN="8"
-
-# # FROM pytorch/pytorch:${PYTORCH}-cuda${CUDA}-cudnn${CUDNN}-devel
-# FROM scrin/dev-spconv
-# ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX 8.0+PTX"
-# ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
-# ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
-
-# ENV DEBIAN_FRONTEND noninteractive
-# # RUN apt-get update && apt-get install -y \
-# # 	python3-opencv ca-certificates python3-dev git wget sudo ninja-build python3-pip
-# # RUN ln -sv /usr/bin/python3 /usr/bin/python
-
-# # RUN apt-get update && apt-get install -y curl apt-utils sudo unzip\
-# #     openssh-server passwd libgl1-mesa-glx gcc git python3-opencv ca-certificates python3-dev wget nano ninja-build libboost-all-dev
-
-
-
-# # RUN wget https://bootstrap.pypa.io/get-pip.py && \
-# # 	python3 get-pip.py && \
-# # 	rm get-pip.py
-
-# RUN pip3 install tensorboard cmake   # cmake from apt-get is too old
-# # RUN pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
-# # RUN pip3 install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-# # RUN pip3 install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-# # pip3 install --use-deprecated=html5lib torch==1.10.2+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-# # RUN sudo apt remove cmake -y
-# # RUN pip3 install cmake --upgrade 
-# # RUN pip install --user 'git+https://github.com/facebookresearch/fvcore'
-
-# # RUN git clone https://github.com/qiank10/detectron2.git 
-# # RUN cd detectron2 && git checkout alt-0.1.1
-
-# # ENV FORCE_CUDA="1"
-
-# # RUN cd detectron2 && pip install -e .
-# # RUN pip install --user -e detectron2
-# # ENV FVCORE_CACHE="/tmp"
-
-
-# RUN git config --global user.name "DJNing"
-# RUN git config --global user.email "dengjn28@gmail.com"
-
-
-
-# # RUN cd / && git clone --branch v1.2.1 https://github.com/traveller59/spconv.git --recursive && cd spconv && python setup.py bdist_wheel && cd ./dist && pip3 install spconv-1.2.1-cp38-cp38-linux_x86_64.whl
-
-# # COPY /mnt/sda1/DJ/code/CenterPoint-KITTI /home/dj/
-# RUN cd / && git clone https://github.com/DJNing/CenterPoint-KITTI.git
-# RUN pip3 install --upgrade pip
-
-# RUN pip3 install -r /CenterPoint-KITTI/requirements.txt 
-# # RUN cd /CenterPoint-KITTI && python setup.py develop
-# # && cd /CenterPoint-KITTI && python setup.py develop
-
-# # RUN curl https://rclone.org/install.sh | sudo bash
-
-# # RUN mkdir /home/dj/data && \
-# #     mkdir /home/dj/code && \
-# # 	mkdir /home/dj/temp
-
-# # enable ssh
-# # RUN mkdir /var/run/sshd
-
-# # RUN echo 'root:root' | chpasswd
-# # RUN sed -i 's/#\?PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-
-# # # SSH login fix. Otherwise user is kicked off after login
-# # RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
-
-# # ENV NOTVISIBLE "in users profile"
-# # RUN echo "export VISIBLE=now" >> /etc/profile
-# # RUN echo "export PATH=$PATH:/opt/conda/bin" >> ~/.bashrc
-# # # EXPOSE 22
-# # CMD ["/usr/sbin/sshd", "-D"]
-# # ENTRYPOINT sudo service ssh restart && bash
-
-
-# # FROM scrin/dev-spconv
-# # RUN printf "Acquire::http::Pipeline-Depth 0;\nAcquire::http::No-Cache true;\nAcquire::BrokenProxy true;" > /etc/apt/apt.conf.d/99fixbadproxy
-
-# # # install vscode
-# # # RUN sudo apt-get update
-# # # RUN sudo apt-get install wget gpg -y
-# # # RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg
-# # # RUN sudo install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/
-# # # RUN sudo sh -c 'echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list'
-# # # RUN rm -f packages.microsoft.gpg
-# # # RUN sudo apt install apt-transport-https -y 
-# # # RUN sudo apt update
-# # # RUN sudo apt install code -y
-
-# # ENV NVIDIA_VISIBLE_DEVICES ${NVIDIA_VISIBLE_DEVICES:-all}
-# # ENV NVIDIA_DRIVER_CAPABILITIES ${NVIDIA_DRIVER_CAPABILITIES:+$NVIDIA_DRIVER_CAPABILITIES,}graphics
-
-# =========================================================================================================
-
-ARG PYTORCH="1.7.1"
-ARG CUDA="11.0"
+ARG PYTORCH="1.9.1"
+ARG CUDA="11.1"
 ARG CUDNN="8"
 
 FROM pytorch/pytorch:${PYTORCH}-cuda${CUDA}-cudnn${CUDNN}-devel
@@ -107,71 +7,39 @@ FROM pytorch/pytorch:${PYTORCH}-cuda${CUDA}-cudnn${CUDNN}-devel
 ENV TORCH_CUDA_ARCH_LIST="6.0 6.1 7.0+PTX 8.0+PTX"
 ENV TORCH_NVCC_FLAGS="-Xfatbin -compress-all"
 ENV CMAKE_PREFIX_PATH="$(dirname $(which conda))/../"
-
 RUN echo 'debconf debconf/frontend select Noninteractive' | debconf-set-selections
-
+RUN rm /etc/apt/sources.list.d/cuda.list
+RUN rm /etc/apt/sources.list.d/nvidia-ml.list
+RUN apt clean
+RUN apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub
+RUN chmod 777 /tmp
 # Install basics
 RUN apt-get update -y \
     && apt-get install build-essential \
-    && apt-get install -y apt-utils git curl ca-certificates bzip2 tree htop wget \
+    && apt-get install -y apt-utils git curl ca-certificates bzip2 tree htop wget x11-apps \
     && apt-get install -y libglib2.0-0 libsm6 libxext6 libxrender-dev bmon iotop g++ python3.7 python3.7-dev python3.7-distutils openssh-server libgl1-mesa-glx
 
-# Install cmake v3.13.2
-# RUN apt-get purge -y cmake && \
-#     mkdir /root/temp && \
-#     cd /root/temp && \
-#     wget https://github.com/Kitware/CMake/releases/download/v3.13.2/cmake-3.13.2.tar.gz && \
-#     tar -xzvf cmake-3.13.2.tar.gz && \
-#     cd cmake-3.13.2 && \
-#     bash ./bootstrap && \
-#     make && \
-#     make install && \
-#     cmake --version && \
-#     rm -rf /root/temp
 RUN pip install --user tensorboard cmake   # cmake from apt-get is too old
 # Install python
 RUN ln -sv /usr/bin/python3.7 /usr/bin/python
-# RUN wget https://bootstrap.pypa.io/get-pip.py && \
-# 	python get-pip.py && \
-# 	rm get-pip.py
-
-# # Install python packages
-# RUN PIP_INSTALL="python -m pip --no-cache-dir install" && \
-#     $PIP_INSTALL numpy==1.19.3 llvmlite numba 
-
-# Install torch and torchvision
-# See https://pytorch.org/ for other options if you use a different version of CUDA
-# RUN pip install --user tensorboard cmake   # cmake from apt-get is too old
-# RUN pip install torch==1.7.1+cu110 torchvision==0.8.2+cu110 torchaudio==0.7.2 -f https://download.pytorch.org/whl/torch_stable.html
-# RUN pip install torch==1.10.0+cu113 torchvision==0.11.1+cu113 torchaudio==0.10.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-# RUN pip install torch==1.11.0+cu113 torchvision==0.12.0+cu113 torchaudio==0.11.0+cu113 -f https://download.pytorch.org/whl/cu113/torch_stable.html
-
 # Install python packages
 RUN PIP_INSTALL="python -m pip --no-cache-dir install" && \
-    $PIP_INSTALL tensorboardX easydict pyyaml scikit-image tqdm SharedArray six matplotlib k3d
+    $PIP_INSTALL tensorboardX easydict pyyaml scikit-image tqdm SharedArray six matplotlib k3d sklearn 
 
 WORKDIR /root
 
-# Install Boost geometry
-# RUN wget https://jaist.dl.sourceforge.net/project/boost/boost/1.68.0/boost_1_68_0.tar.gz && \
-#     tar xzvf boost_1_68_0.tar.gz && \
-#     cp -r ./boost_1_68_0/boost /usr/include && \
-#     rm -rf ./boost_1_68_0 && \
-    # rm -rf ./boost_1_68_0.tar.gz 
-
-# A weired problem that hasn't been solved yet
-# RUN pip uninstall -y SharedArray && \
-#     pip install SharedArray
-RUN cd / && git clone https://github.com/gc625/CenterPoint-KITTI.git
+RUN cd / && git clone https://github.com/DJNing/CenterPoint-KITTI.git
 RUN pip install -r /CenterPoint-KITTI/requirements.txt 
+RUN pip install --ignore-installed PyYAML
+RUN pip install open3d
 RUN pip install spconv-cu111
 
 RUN mkdir /var/run/sshd
 
 RUN echo 'root:root' | chpasswd
+# setting up ssh and X11 forwarding
 RUN sed -i 's/#\?PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
-
-# SSH login fix. Otherwise user is kicked off after login
+RUN sed -i -e 's/#X11UseLocalhost yes/X11UseLocalhost no/' /etc/ssh/sshd_config
 RUN sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 ENV NOTVISIBLE "in users profile"
@@ -180,5 +48,7 @@ RUN echo "export PATH=${PATH}" >> /root/.bashrc
 # set cuda env in bashrc
 COPY ./cuda_env.txt /
 RUN cat /cuda_env.txt >> /root/.bashrc
+# COPY ./ssh_config /etc/ssh/
+
 # EXPOSE 22
 CMD ["/usr/sbin/sshd", "-D"]

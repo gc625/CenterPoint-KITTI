@@ -451,6 +451,9 @@ class IASSD_Head(PointHeadTemplate):
             center_loss_reg, tb_dict_3 = self.get_vote_loss_loss() # center assign
         tb_dict.update(tb_dict_3)
 
+        # multilayer vote loss
+        
+
         # semantic loss in SA layers
         if self.model_cfg.LOSS_CONFIG.get('LOSS_INS', None) is not None:
             assert ('sa_ins_preds' in self.forward_ret_dict) and ('sa_ins_labels' in self.forward_ret_dict)
@@ -605,8 +608,12 @@ class IASSD_Head(PointHeadTemplate):
         one_hot_targets = one_hot_targets[..., 1:]
         
         if self.model_cfg.LOSS_CONFIG.CENTERNESS_REGULARIZATION:
-            centerness_mask = self.generate_center_ness_mask()
-            one_hot_targets = one_hot_targets * centerness_mask.unsqueeze(-1).repeat(1, one_hot_targets.shape[1])
+            if self.model_cfg.LOSS_CONFIG.get('IGNORE_CENTERNESS', False):
+                pass
+            else:
+                centerness_mask = self.generate_center_ness_mask()
+                one_hot_targets = one_hot_targets * centerness_mask.unsqueeze(-1).repeat(1, one_hot_targets.shape[1])
+            pass
 
         point_loss_cls = self.cls_loss_func(point_cls_preds, one_hot_targets, weights=cls_weights).mean(dim=-1).sum()
         loss_weights_dict = self.model_cfg.LOSS_CONFIG.LOSS_WEIGHTS

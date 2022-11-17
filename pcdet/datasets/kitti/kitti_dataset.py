@@ -23,16 +23,16 @@ class KittiDataset(DatasetTemplate):
             dataset_cfg=dataset_cfg, class_names=class_names, training=training, root_path=root_path, logger=logger
         )
         print(f'ROOT PATH: {self.root_path}')
-        
+
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
-        self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
+        self.root_split_path = self.root_path / ('training' if self.split != 'test' and self.split != 'testing' else 'testing')
 
         split_dir = self.root_path / 'ImageSets' / (self.split + '.txt')
         self.sample_id_list = [x.strip() for x in open(split_dir).readlines()] if split_dir.exists() else None
 
         self.kitti_infos = []
         self.include_kitti_data(self.mode)
-
+        self.use_vod_eval = dataset_cfg.get('USE_VOD_EVAL', False)
         #  not sure if modifying /datasets/dataset.py is a good idea so 
         # doing it like this for now, 
         self.is_radar = dataset_cfg.get('IS_RADAR', False)
@@ -42,11 +42,11 @@ class KittiDataset(DatasetTemplate):
         self.use_attach = self.dataset_cfg.get('USE_ATTACH', False)
         self.attach_root = self.dataset_cfg.get('ATTACH_ROOT', None) if self.use_attach else None
         self.attach_root = Path(self.attach_root) if self.attach_root is not None else None
-        self.resample_pts_num = 100 # default setting
+        self.resample_pts_num = 100  # default setting
+        self.block_point_cloud_features = self.dataset_cfg.get('BLOCK_POINT_CLOUD_FEATURES', False)
         for process_cfg in self.dataset_cfg.DATA_PROCESSOR:
             if process_cfg.NAME == 'sample_radar_points':
                 self.resample_pts_num = process_cfg.MIN_NUM_PTS
-
 
     def include_kitti_data(self, mode):
         if self.logger is not None:
@@ -68,7 +68,8 @@ class KittiDataset(DatasetTemplate):
 
     def set_split(self, split):
         super().__init__(
-            dataset_cfg=self.dataset_cfg, class_names=self.class_names, training=self.training, root_path=self.root_path, logger=self.logger
+            dataset_cfg=self.dataset_cfg, class_names=self.class_names, training=self.training,
+            root_path=self.root_path, logger=self.logger
         )
         self.split = split
         self.root_split_path = self.root_path / ('training' if self.split != 'test' else 'testing')
@@ -79,21 +80,54 @@ class KittiDataset(DatasetTemplate):
     def get_lidar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
         assert lidar_file.exists()
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        lidar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        if self.block_point_cloud_features:
+            lidar_point_cloud[:, 3:] = 0
+        return lidar_point_cloud
 
     def get_attach_lidar(self, idx):
         # create soft link for attach_lidar
         lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
-        # print('getting attach lidar data')
+        # print('ATTACHING LIDAR')
         assert lidar_file.exists()
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        lidar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 4)
+        if self.block_point_cloud_features:
+            lidar_point_cloud[:, 3:] = 0
+        return lidar_point_cloud
+
+    def get_attach_radar(self, idx):
+        # create soft link for attach_lidar
+        lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
+        used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
+        radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        
+        assert lidar_file.exists()
+        
+        idx = [0,1,2]
+        if 'RCS' in used_feature_list:
+            idx += [3]
+        if 'v_r' in used_feature_list:
+            idx += [4]
+        if 'v_r_compensated' in used_feature_list:
+            idx += [5]
+        if 'time' in used_feature_list:
+            idx += [6]
+        idx = np.array(idx)
+        
+        if self.block_point_cloud_features:
+            radar_points[:, 3:] = 0
+
+        
+        return radar_points[:,idx]
 
     def get_radar(self, idx):
         lidar_file = self.root_split_path / 'velodyne' / ('%s.bin' % idx)
-        assert lidar_file.exists()
         # print(lidar_file)
-        return np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
-
+        assert lidar_file.exists()
+        radar_point_cloud = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
+        if self.block_point_cloud_features:
+            radar_point_cloud[:, 3:] = 0
+        return radar_point_cloud
 
     def get_image_shape(self, idx):
         img_file = self.root_split_path / 'image_2' / ('%s.jpg' % idx)
@@ -109,7 +143,7 @@ class KittiDataset(DatasetTemplate):
         calib_file = self.root_split_path / 'calib' / ('%s.txt' % idx)
         assert calib_file.exists()
         return calibration_kitti.Calibration(calib_file)
-    
+
     def get_attach_calib(self, idx):
         calib_file = self.root_split_path / 'attach_calib' / ('%s.txt' % idx)
         assert calib_file.exists()
@@ -167,7 +201,7 @@ class KittiDataset(DatasetTemplate):
             image_info = {'image_idx': sample_idx, 'image_shape': self.get_image_shape(sample_idx)}
             info['image'] = image_info
             calib = self.get_calib(sample_idx)
-            
+
             P2 = np.concatenate([calib.P2, np.array([[0., 0., 0., 1.]])], axis=0)
             R0_4x4 = np.zeros([4, 4], dtype=calib.R0.dtype)
             R0_4x4[3, 3] = 1.
@@ -208,9 +242,9 @@ class KittiDataset(DatasetTemplate):
                 info['annos'] = annotations
 
                 if count_inside_pts:
-                    
-                    points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx) 
-                        
+
+                    points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
+
                     calib = self.get_calib(sample_idx)
                     pts_rect = calib.lidar_to_rect(points[:, 0:3])
 
@@ -247,7 +281,7 @@ class KittiDataset(DatasetTemplate):
             print('gt_database sample: %d/%d' % (k + 1, len(infos)))
             info = infos[k]
             sample_idx = info['point_cloud']['lidar_idx']
-            points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx) 
+            points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
             annos = info['annos']
             names = annos['name']
             difficulty = annos['difficulty']
@@ -299,6 +333,7 @@ class KittiDataset(DatasetTemplate):
         Returns:
 
         """
+
         def get_template_prediction(num_samples):
             ret_dict = {
                 'name': np.zeros(num_samples), 'truncated': np.zeros(num_samples),
@@ -342,8 +377,12 @@ class KittiDataset(DatasetTemplate):
             single_pred_dict = generate_single_sample_dict(index, box_dict)
             single_pred_dict['frame_id'] = frame_id
             annos.append(single_pred_dict)
-
+            # print('=================================')
+            # print(output_path)
+            # print('=================================')
             if output_path is not None:
+                # import ipdb
+                # ipdb.set_trace()
                 cur_det_file = output_path / ('%s.txt' % frame_id)
                 with open(cur_det_file, 'w') as f:
                     bbox = single_pred_dict['bbox']
@@ -364,13 +403,28 @@ class KittiDataset(DatasetTemplate):
         if 'annos' not in self.kitti_infos[0].keys():
             return None, {}
 
+        from .vod_official_eval import kitti_official_evaluate as vod_eval
         from .kitti_object_eval_python import eval as kitti_eval
 
         eval_det_annos = copy.deepcopy(det_annos)
         eval_gt_annos = [copy.deepcopy(info['annos']) for info in self.kitti_infos]
-        ap_result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names)
 
-        return ap_result_str, ap_dict
+        final_evaluation = dict()
+        self.logger.info('*************   using vod official evaluation script   *************')
+        vod_evaluation_result = {}
+        vod_evaluation_result.update(
+            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar))
+        vod_evaluation_result.update(
+            vod_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, custom_method=3,
+                                                is_radar=self.is_radar))
+        final_evaluation['vod_eval'] = vod_evaluation_result
+        self.logger.info('*************   using pcdet official evaluation script   *************')
+        kitti_evaluation_result = {}
+        result_str, ap_dict = kitti_eval.get_official_eval_result(eval_gt_annos, eval_det_annos, class_names, is_radar=self.is_radar)
+        kitti_evaluation_result.update(ap_dict)
+        self.logger.info(result_str)
+        final_evaluation['kitti_eval'] = kitti_evaluation_result
+        return final_evaluation
 
     def __len__(self):
         if self._merge_all_iters_to_one_epoch:
@@ -389,13 +443,17 @@ class KittiDataset(DatasetTemplate):
 
         points = self.get_radar(sample_idx) if self.is_radar else self.get_lidar(sample_idx)
         calib = self.get_calib(sample_idx)
+
         
         if self.use_attach & self.training:
-            # print('loading attach lidar')
-            # also get calib for lidar
-            attach_calib = self.get_attach_calib(sample_idx)
-            attach = self.get_attach_lidar(sample_idx)
+            if self.is_radar:
+                attach_calib = self.get_attach_calib(sample_idx)
+                attach = self.get_attach_lidar(sample_idx)
             # if self.dataset_cfg.FOV_POINTS_ONLY:
+            else:
+                attach_calib = self.get_attach_calib(sample_idx)
+                attach = self.get_attach_radar(sample_idx)
+
         elif self.debug:
             attach_calib = self.get_attach_calib(sample_idx)
             attach = self.get_attach_lidar(sample_idx)
@@ -407,7 +465,7 @@ class KittiDataset(DatasetTemplate):
             pts_rect = calib.lidar_to_rect(points[:, 0:3])
             fov_flag = self.get_fov_flag(pts_rect, img_shape, calib)
             points = points[fov_flag]
-            if (self.use_attach and self.training ) or self.debug:
+            if (self.use_attach and self.training) or self.debug:
                 attach_pts_rec = attach_calib.lidar_to_rect(attach[:, 0:3])
                 attach_fov_flag = self.get_fov_flag(attach_pts_rec, img_shape, attach_calib)
                 attach_pts_rec = attach_pts_rec[attach_fov_flag]
@@ -416,10 +474,6 @@ class KittiDataset(DatasetTemplate):
                 attach_fov = attach[attach_fov_flag]
                 attach_feature = attach_fov[:, 3:]
                 attach = np.concatenate((attach_tranformed, attach_feature), axis=-1)
-                
-
-                
-
 
         input_dict = {
             'points': points,
@@ -451,9 +505,8 @@ class KittiDataset(DatasetTemplate):
         return data_dict
 
 
-def create_kitti_infos(dataset_cfg, class_names, data_path, save_path,workers=4):
-    
-    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False )
+def create_kitti_infos(dataset_cfg, class_names, data_path, save_path, workers=4):
+    dataset = KittiDataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, training=False)
     train_split, val_split = 'train', 'val'
 
     train_filename = save_path / ('kitti_infos_%s.pkl' % train_split)
@@ -494,13 +547,13 @@ def create_kitti_infos(dataset_cfg, class_names, data_path, save_path,workers=4)
 
 if __name__ == '__main__':
     import sys
+
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_kitti_infos':
         import yaml
         from pathlib import Path
         from easydict import EasyDict
 
         isRadar = 'radar' in sys.argv[2]
-        
 
         print('====> print %s' % sys.argv[2])
         dataset_cfg = EasyDict(yaml.safe_load(open(sys.argv[2])))

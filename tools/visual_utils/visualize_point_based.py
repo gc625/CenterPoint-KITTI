@@ -12,9 +12,17 @@ from vod.visualization.settings import label_color_palette_2d
 
 
 
-def transform_anno(loc, frame_id):
-    x,y, z = loc[0], loc[1], loc[2]
-    calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/calib/{0}.txt".format(frame_id)
+def transform_anno(loc, frame_id, is_radar=True, is_test=False):
+    x, y, z = loc[0], loc[1], loc[2]
+    modality = 'radar' if is_radar else 'lidar'
+    split = 'testing' if is_test else 'training'
+
+    calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_%s/%s/calib/%s.txt"%(modality, split, frame_id)
+
+    # if is_radar:
+    #     calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_radar/training/calib/{0}.txt".format(frame_id)
+    # else:
+    #     calib_path = "/root/dj/code/CenterPoint-KITTI/data/vod_lidar/training/calib/{0}.txt".format(frame_id)
     calib = calibration_kitti.Calibration(calib_path)
     loc = np.array([[x,y,z]])
     loc_lidar = calib.rect_to_lidar(loc)
@@ -43,7 +51,7 @@ def get_rot_corner(x,y,l,w,a):
 
 
 
-def anno2plt(anno, color_dict, lw, frame_id, xz=False):
+def anno2plt(anno, color_dict, lw, frame_id, xz=False, is_radar=True, is_test=False):
     dim = anno['dimensions']
     loc = anno['location']
     # angle = anno['rotation_y'] * 180 / 3.14
@@ -61,13 +69,13 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False):
     
         if xz:
 
-            x, _, y = transform_anno(loc[idx], frame_id)
+            x, _, y = transform_anno(loc[idx], frame_id, is_radar=is_radar, is_test=is_test)
             # w, _, l = dim[idx]
             l, w, _ = dim[idx]  # 
             ang = -angle[idx]* 0
         else:
             # print(loc[idx])
-            x, y, z = transform_anno(loc[idx], frame_id)
+            x, y, z = transform_anno(loc[idx], frame_id, is_radar=is_radar, is_test=is_test)
             # print(x,y)
             
             ### X -> LENGTH
@@ -92,17 +100,15 @@ def anno2plt(anno, color_dict, lw, frame_id, xz=False):
 
 
 
-def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title):
+def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title, ext_legends=[], is_radar=True, is_test=False):
 
 
     # 3. draw bbx
     try:
-        rec_list = anno2plt(annos, color_dict, 2, frame_id=frame_id, xz=False)
+        rec_list = anno2plt(annos, color_dict, 2, frame_id=frame_id, xz=False, is_radar=is_radar, is_test=is_test)
     except:
-        rec_list = anno2plt(annos[0], color_dict, 2, frame_id=frame_id, xz=False)
+        rec_list = anno2plt(annos[0], color_dict, 2, frame_id=frame_id, xz=False, is_radar=is_radar, is_test=is_test)
     
-    for rec in rec_list:
-        ax.add_patch(rec)
     # 1. draw original points if exist
     if pts is not None:
         x = pts[:, 1]
@@ -113,10 +119,15 @@ def drawBEV(ax, pts, centers, annos, color_dict, frame_id, ax_title):
         cx = centers[:, 1]
         cy = centers[:, 2]
         ax.scatter(cx, cy, c='red', s=0.1)
+    
+    for rec in rec_list:
+        ax.add_patch(rec)
 
     legend_elements = [Patch(facecolor='white', edgecolor=v, label=k) for i, (k, v) in enumerate(color_dict.items())]
-    legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
+    if centers is not None:
+        legend_elements += [Line2D([0], [0], marker='o', color='w', label='FG points',
                           markerfacecolor='r', markersize=10)]
+    legend_elements += ext_legends
     ax.legend(handles=legend_elements, loc=1)
     ax.set_title(ax_title)
 
@@ -134,11 +145,11 @@ if __name__ == '__main__':
     
     
     # trans-ssd
-    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_vcomp/eval/checkpoint_epoch_100')
+    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/eval/checkpoint_epoch_11')
     # ia-ssd
     # root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_128_all/eval/checkpoint_epoch_100')
-    
-    # root_path = P('/root/dj/code/CenterPoint-KITTI/output/pointpillar_vod_lidar/filter5/eval/eval_with_train/epoch_80/val')
+    # base model 
+    root_path = P('/root/dj/code/CenterPoint-KITTI/output/IA-SSD-vod-radar/iassd_best_aug_new/eval/best_epoch_checkpoint')
 
     color_dict = {}
 
@@ -150,11 +161,11 @@ if __name__ == '__main__':
     for i, v in enumerate(cls_name):
         color_dict[v] = label_color_palette_2d[v]
     # load gt
-    with open(str(root_path / 'gt.pkl'), 'rb') as f:
+    with open(str(root_path / 'radar_label.pkl'), 'rb') as f:
         gt = pickle.load(f)
 
     # load det
-    with open(str(root_path / 'dt.pkl'), 'rb') as f:
+    with open(str(root_path / 'radar_preds.pkl'), 'rb') as f:
         dt = pickle.load(f)
 
     # load centers
@@ -189,25 +200,26 @@ if __name__ == '__main__':
 
     # 1. image with center origin and gt annos
     ids = list(gt.keys())
+    print('=====> drawing detection BEVs')
     for id in tqdm(ids):
         img_fname = str(id) + '.png'
         
         # print(id,points[id])
         # draw gt
-        drawBEV(ax, points[id], centers_origin[id], gt[id], color_dict, id, 'GT')
-        gt_img_full_fname = str(gt_save_dir / img_fname)
-        plt.xlim(-0,75)
-        plt.ylim(-30,30)
-        plt.savefig(gt_img_full_fname)
-        ax.clear()
-        
-        # draw pred
-        # drawBEV(ax, None, centers_origin[id], dt[id], color_dict, id, 'pred')
-        # pred_img_full_fname = str(pred_save_dir / img_fname)
+        # drawBEV(ax, points[id], centers_origin[id], gt[id], color_dict, id, 'GT')
+        # gt_img_full_fname = str(gt_save_dir / img_fname)
         # plt.xlim(-0,75)
         # plt.ylim(-30,30)
-        # plt.savefig(pred_img_full_fname)
+        # plt.savefig(gt_img_full_fname)
         # ax.clear()
+        
+        # draw pred
+        drawBEV(ax, points[id], centers_origin[id], dt[id], color_dict, id, 'pred')
+        pred_img_full_fname = str(pred_save_dir / img_fname)
+        plt.xlim(-0,75)
+        plt.ylim(-30,30)
+        plt.savefig(pred_img_full_fname)
+        ax.clear()
         
     
     # plt.show()

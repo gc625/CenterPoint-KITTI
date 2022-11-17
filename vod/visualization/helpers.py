@@ -1,3 +1,4 @@
+from cProfile import label
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -23,6 +24,19 @@ This function returns the list required for creating a camera in k3d.
     pose_camera_up = pose_camera[2, :3] - pose_camera[0, :3]
     return pose_camera[:2, :3].flatten().tolist() + pose_camera_up.tolist()
 
+def plot_legends(vis_classes, colors):
+    ax = plt.gca()
+    plt.rc('legend',fontsize=20)
+    # plt.legend(fontsize=20)
+    # custom_lines = [Line2D([0], [0], color=cmap(0.), lw=4),
+    #             Line2D([0], [0], color=cmap(.5), lw=4),
+    #             Line2D([0], [0], color=cmap(1.), lw=4)]
+    legends = []
+    for cls in vis_classes:
+        color = colors[cls]
+        cur_legend = Line2D([0], [0], color=color, lw=4, label=cls)
+        legends += [cur_legend]
+    ax.legend(handles=legends)
 
 def get_3d_label_corners(labels: FrameLabels):
     """
@@ -121,6 +135,10 @@ def get_2d_label_corners(labels: FrameLabels, transformations_matrix: FrameTrans
         corners_img = corners_img.tolist()
         distance = np.linalg.norm((label['x'], label['y'], label['z']))
 
+        if np.max(corners_img)-np.min(corners_img) > 10000:
+            print('Error: Skipping index=%s Label because it is too close' % index)
+            continue
+
         bboxes.append({'label_class': label['label_class'],
                        'corners': corners_img,
                        'score': label['score'],
@@ -160,7 +178,7 @@ def plot_boxes(boxes: list, colors=None,is_gt = True):
             alpha = 0.15
         else:
             if is_gt:
-                alpha = 0.10
+                alpha = 0.3
             else:
                 alpha = 0.2
 

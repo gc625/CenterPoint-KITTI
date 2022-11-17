@@ -10,6 +10,7 @@ import numpy as np
 import torch
 from tensorboardX import SummaryWriter
 
+import ipdb
 from eval_utils import eval_utils
 from pcdet.config import cfg, cfg_from_list, cfg_from_yaml_file, log_config_to_file
 from pcdet.datasets import build_dataloader
@@ -43,7 +44,7 @@ def parse_config():
     cfg_from_yaml_file(args.cfg_file, cfg)
     cfg.TAG = Path(args.cfg_file).stem
     cfg.EXP_GROUP_PATH = '/'.join(args.cfg_file.split('/')[1:-1])  # remove 'cfgs' and 'xxxx.yaml'
-
+    # ipdb.set_trace()
     np.random.seed(1024)
 
     if args.set_cfgs is not None:
@@ -52,18 +53,33 @@ def parse_config():
     return args, cfg
 
 
-def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, save_to_file=False, result_dir=None):
+def eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, \
+    save_to_file=False, result_dir=None, save_centers=False):
     # load checkpoint
     if reload:
         model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
         model.cuda()
-
+    # ipdb.set_trace()
     # start evaluation
+    save_to_file = args.save_to_file
     eval_utils.eval_one_epoch(
         cfg, model, test_loader, epoch_id, logger, dist_test=dist_test,
-        result_dir=eval_output_dir, save_to_file=save_to_file
+        result_dir=eval_output_dir, save_to_file=save_to_file, save_centers=save_centers
     )
 
+def vis_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=False, reload=True, \
+    save_to_file=False, result_dir=None, save_centers=False):
+    # load checkpoint
+    # if reload:
+    #     model.load_params_from_file(filename=args.ckpt, logger=logger, to_cpu=dist_test)
+    #     model.cuda()
+    # ipdb.set_trace()
+    # start evaluation
+    save_to_file = args.save_to_file
+    eval_utils.vis_one_epoch(
+        cfg, model, test_loader, epoch_id, logger, dist_test=dist_test,
+        result_dir=eval_output_dir, save_to_file=save_to_file, save_centers=save_centers
+    )
 
 def get_no_evaluated_ckpt(ckpt_dir, ckpt_record_file, args):
     ckpt_list = glob.glob(os.path.join(ckpt_dir, '*checkpoint_epoch_*.pth'))
@@ -114,7 +130,7 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
 
         model.load_params_from_file(filename=cur_ckpt, logger=logger, to_cpu=dist_test)
         model.cuda()
-
+        # ipdb.set_trace()
         # start evaluation
         cur_result_dir = eval_output_dir / ('epoch_%s' % cur_epoch_id) / cfg.DATA_CONFIG.DATA_SPLIT['test']
         tb_dict = eval_utils.eval_one_epoch(
@@ -124,7 +140,15 @@ def repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir
 
         if cfg.LOCAL_RANK == 0:
             for key, val in tb_dict.items():
-                tb_log.add_scalar(key, val, cur_epoch_id)
+                    if isinstance(val, dict):
+                        for sub_key, sub_val in val.items():
+                            if type(sub_val) == dict:
+                                pass
+                            else:
+                                tb_log.add_scalar(sub_key, sub_val, cur_epoch_id)
+                            
+                    else:
+                        tb_log.add_scalar(key, val, cur_epoch_id)
 
         # record this epoch which has been evaluated
         with open(ckpt_record_file, 'a') as f:
@@ -148,8 +172,8 @@ def main():
     else:
         assert args.batch_size % total_gpus == 0, 'Batch size should match the number of gpus'
         args.batch_size = args.batch_size // total_gpus
-
-    output_dir = cfg.ROOT_DIR / 'output' / cfg.EXP_GROUP_PATH / cfg.TAG / args.extra_tag
+    # ipdb.set_trace()
+    output_dir = cfg.ROOT_DIR / 'output' / cfg.TAG / args.extra_tag
     output_dir.mkdir(parents=True, exist_ok=True)
 
     eval_output_dir = output_dir / 'eval'
@@ -181,6 +205,13 @@ def main():
 
     ckpt_dir = args.ckpt_dir if args.ckpt_dir is not None else output_dir / 'ckpt'
 
+    # change dataset_cfg temporary to test
+    bm_split = cfg.DATA_CONFIG.DATA_SPLIT['bench_mark']
+    bm_info = cfg.DATA_CONFIG.INFO_PATH['bench_mark']
+
+    cfg.DATA_CONFIG.DATA_SPLIT['test'] = bm_split
+    cfg.DATA_CONFIG.INFO_PATH['test'] = bm_info
+
     test_set, test_loader, sampler = build_dataloader(
         dataset_cfg=cfg.DATA_CONFIG,
         class_names=cfg.CLASS_NAMES,
@@ -189,11 +220,14 @@ def main():
     )
 
     model = build_network(model_cfg=cfg.MODEL, num_class=len(cfg.CLASS_NAMES), dataset=test_set)
+    # ipdb.set_trace()
     with torch.no_grad():
         if args.eval_all:
             repeat_eval_ckpt(model, test_loader, args, eval_output_dir, logger, ckpt_dir, dist_test=dist_test)
         else:
-            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, epoch_id, dist_test=dist_test)
+            # ipdb.set_trace()
+            eval_single_ckpt(model, test_loader, args, eval_output_dir, logger, \
+                epoch_id, dist_test=dist_test)
 
 
 if __name__ == '__main__':

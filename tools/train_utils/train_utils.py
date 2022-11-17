@@ -3,6 +3,7 @@ import os
 
 import torch
 import tqdm
+from tools.eval_utils import eval_utils
 from torch.nn.utils import clip_grad_norm_
 
 
@@ -44,10 +45,9 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
         #             for idx, single_module in enumerate(model.module_list):
         #                 if mode in str(single_module.__repr__).lower():
         #                     for name, param in single_module.named_parameters():
-                                
+
         #                         if (logger is not None) and (param.requires_grad):
         #                             logger.info('params in {name} is not freezed'.format(name=name))
-
 
         optimizer.zero_grad()
         # print('\ngt_shape before feeding in network:', batch['gt_boxes'].shape)
@@ -77,13 +77,13 @@ def train_one_epoch(model, optimizer, train_loader, model_func, lr_scheduler, ac
     return accumulated_iter
 
 
-def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_cfg,
+def train_model(model, optimizer, train_loader, test_loader, cfg, model_func, lr_scheduler, optim_cfg,
                 start_epoch, total_epochs, start_iter, rank, tb_log, ckpt_save_dir, train_sampler=None,
                 lr_warmup_scheduler=None, ckpt_save_interval=1, max_ckpt_save_num=50,
-                merge_all_iters_to_one_epoch=False, logger=None):
+                merge_all_iters_to_one_epoch=False, logger=None, eval_output_dir=None, eval_epoch=1, save_best_eval=False, freeze_mode=None):
     accumulated_iter = start_iter
     # freeze some layers
-    freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
+    # freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
 
     if freeze_mode is not None:
         mode_list = ['backbone_3d', 'multibackbone', 'head', 'attach']
@@ -99,6 +99,8 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                                 param.requires_grad = False
                                 if logger is not None:
                                     logger.info('freeze params in {name}'.format(name=name))
+    best_eval_mAP_3d = 0.0
+    best_eval_dict = None
     with tqdm.trange(start_epoch, total_epochs, desc='epochs', dynamic_ncols=True, leave=(rank == 0)) as tbar:
         total_it_each_epoch = len(train_loader)
         if merge_all_iters_to_one_epoch:
@@ -142,6 +144,18 @@ def train_model(model, optimizer, train_loader, model_func, lr_scheduler, optim_
                 save_checkpoint(
                     checkpoint_state(model, optimizer, trained_epoch, accumulated_iter), filename=ckpt_name,
                 )
+
+            # run eval
+            if trained_epoch % eval_epoch == 0:
+                # start evaluation
+                ret_dict = eval_utils.eval_one_epoch(
+                    cfg, model, test_loader, trained_epoch, logger, dist_test=False,
+                    result_dir=eval_output_dir, save_best_eval=save_best_eval, best_mAP_3d=best_eval_mAP_3d
+                )
+                best_eval_mAP_3d = max(best_eval_mAP_3d, float(ret_dict['mAP_3d']))
+                # if best_eval_mAP_3d < float(ret_dict['mAP_3d']):
+                #     best_eval_dict =
+                #     pass
 
 
 def model_state_to_cpu(model_state):
