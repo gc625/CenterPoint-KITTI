@@ -375,6 +375,7 @@ def FPS(xyz: torch.Tensor, features: torch.Tensor = None, npoint=None, fps_type=
         ).transpose(1, 2).contiguous() if npoint is not None else None # (B, N, 3)
     return new_xyz, fps_idx
 
+
 class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
     """Pointnet set abstraction layer with specific downsampling and multiscale grouping """
 
@@ -664,6 +665,9 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         else:
             new_xyz = ctr_xyz
 
+
+
+
         if len(self.groupers) > 0:
             for i in range(len(self.groupers)):
                 # ================================== this features can be saved for analysis =======================
@@ -725,6 +729,545 @@ class PointnetSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             return new_xyz, new_features, cls_features, sampled_idx_list
         else:
             return new_xyz, new_features, cls_features
+
+
+class DoubleSAModuleMSG_WithSampling(_PointnetSAModuleBase):
+    def __init__(self, *,
+                 npoint_list: List[List[int]],
+                 sample_range_list: List[List[int]],
+                 sample_type_list: List[List[str]],
+                 radii: List[List[float]],
+                 nsamples: List[List[int]],
+                 mlps: List[List[List[int]]],                 
+                 use_xyz: List[bool] = [True,True],
+                 dilated_group= [False,False],
+                 reverse=  [False,False],
+                 pool_method=['max_pool','maxpool'],
+                 sample_idx=[False,False],
+                 use_pooling_weights=[False,False],
+                 aggregation_mlp: List[List[int]],
+                 confidence_mlp: List[List[int]],
+                 num_class):
+
+
+        self.MSGs = []
+        for i in range(len(npoint_list)):
+            self.MSGs.append(PointnetSAModuleMSG_WithSampling(
+                npoint_list=npoint_list[i],
+                sample_range_list=sample_range_list[i],
+                sample_type_list=sample_type_list[i],
+                radii=radii[i],
+                nsamples=nsamples[i],
+                mlps=mlps[i],
+                use_xyz=use_xyz[i],
+                dilated_group=dilated_group[i],
+                reverse=reverse[i],
+                pool_method=pool_method[i],
+                sample_idx=sample_idx[i],
+                use_pooling_weights=use_pooling_weights[i],
+                aggregation_mlp=aggregation_mlp[i],
+                confidence_mlp=confidence_mlp[i],
+                num_class=num_class,
+                )
+            )
+
+    def forward(self,
+            xyz: List[torch.Tensor],
+            features: List[torch.Tensor],
+            cls_features: List[torch.Tensor],
+            new_xyz=[None,None],
+            ctr_xyz=[None,None]):
+
+
+        results = []
+        for i in range(len(xyz)):
+            ret = self.MSGs[i](
+                xyz=xyz[i],
+                features=features[i],
+                cls_features=cls_features[i],
+                new_xyz=new_xyz[i],)
+
+
+
+
+class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
+
+
+    def build_sa_modules(self,
+                npoint_list: List[int],
+                sample_range_list: List[int],
+                sample_type_list: List[str],
+                radii: List[float],
+                nsamples: List[int],
+                mlps: List[List[int]],                 
+                use_xyz: bool = True,
+                dilated_group=False,
+                reverse=False,
+                pool_method='max_pool',
+                sample_idx=False,
+                use_pooling_weights=False,
+                aggregation_mlp: List[int] = None,
+                confidence_mlp: List[int] = None,
+                num_class: int = 3) -> dict:
+        
+        SA_MODULES = nn.ModuleList()
+        GROUPING_MODULES = nn.ModuleList()
+        POOL_WEIGHTS = nn.ModuleList()
+        MLPS = nn.ModuleList()
+        NSAMPLES = nsamples
+
+        SAMPLE_TYPE_LIST = sample_type_list
+        SAMPLE_RANGE_LIST = sample_range_list
+        DILATED_GROUP = dilated_group
+
+        assert len(radii) == len(nsamples) == len(mlps)
+
+        NPOINT_LIST = npoint_list
+        USE_POOLING_WEIGHTS = use_pooling_weights
+        
+        REVERSE = reverse
+        out_channels = 0
+        SAMPLE_IDX = sample_idx
+
+
+
+        for i in range(len(radii)):
+            radius = radii[i]
+            nsample = nsamples[i]
+            if DILATED_GROUP:
+                if i == 0:
+                    min_radius = 0.
+                else:
+                    min_radius = radii[i-1]
+                GROUPING_MODULES.append(
+                    pointnet2_utils.QueryDilatedAndGroup(
+                        radius, min_radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+                if USE_POOLING_WEIGHTS:
+                    POOL_WEIGHTS.append(PoolingWeight())
+            else:
+                GROUPING_MODULES.append(
+                    pointnet2_utils.QueryAndGroup(
+                        radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+
+                if USE_POOLING_WEIGHTS:
+                    POOL_WEIGHTS.append(PoolingWeight())
+
+            mlp_spec = mlps[i]
+            if use_xyz:
+                mlp_spec[0] += 3
+
+            shared_mlps = []
+            for k in range(len(mlp_spec) - 1):
+                shared_mlps.extend([
+                    nn.Conv2d(mlp_spec[k], mlp_spec[k + 1],
+                              kernel_size=1, bias=False),
+                    nn.BatchNorm2d(mlp_spec[k + 1]),
+                    nn.ReLU()
+                ])
+            MLPS.append(nn.Sequential(*shared_mlps))
+            out_channels += mlp_spec[-1]
+
+        POOL_METHOD = pool_method
+
+        if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(self.mlps) > 0):
+            shared_mlp = []
+            for k in range(len(aggregation_mlp)):
+                shared_mlp.extend([
+                    nn.Conv1d(out_channels,
+                              aggregation_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(aggregation_mlp[k]),
+                    nn.ReLU()
+                ])
+                out_channels = aggregation_mlp[k]
+            AGGREGATION_LAYER = nn.Sequential(*shared_mlp)
+        else:
+            AGGREGATION_LAYER = None
+
+        if (confidence_mlp is not None) and (len(confidence_mlp) != 0):
+            shared_mlp = []
+            for k in range(len(confidence_mlp)):
+                shared_mlp.extend([
+                    nn.Conv1d(out_channels,
+                              confidence_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(confidence_mlp[k]),
+                    nn.ReLU()
+                ])
+                out_channels = confidence_mlp[k]
+            shared_mlp.append(
+                nn.Conv1d(out_channels, num_class, kernel_size=1, bias=True),
+            )
+            CONFIDENCE_LAYERS = nn.Sequential(*shared_mlp)
+        else:
+            CONFIDENCE_LAYERS = None
+
+
+        ALL_MODULES = {
+            "SA_MODULES":SA_MODULES,
+            "GROUPING_MODULES":GROUPING_MODULES,
+            "POOL_WEIGHTS":POOL_WEIGHTS,
+            "MLPS":MLPS,
+            "AGGREGATION_LAYER":AGGREGATION_LAYER,
+            "CONFIDENCE_LAYERS":CONFIDENCE_LAYERS,
+            "SAMPLE_TYPE_LIST":SAMPLE_TYPE_LIST,
+            "SAMPLE_RANGE_LIST":SAMPLE_RANGE_LIST,
+            "NPOINT_LIST":NPOINT_LIST,
+            "REVERSE":REVERSE,
+            "SAMPLE_IDX":SAMPLE_IDX,
+            "POOL_METHOD":POOL_METHOD,
+            'NSAMPLES': NSAMPLES,
+            'RADII': radii
+        }
+
+        return ALL_MODULES 
+
+    def single_sample_and_gather(self,
+                            MODULE_INFO: dict,
+                            xyz: torch.Tensor, 
+                            features: torch.Tensor = None, 
+                            cls_features: torch.Tensor = None,
+                            new_xyz=None, 
+                            ctr_xyz=None,):
+
+        SAMPLE_TYPE_LIST = MODULE_INFO['SAMPLE_TYPE_LIST']
+        SAMPLE_RANGE_LIST = MODULE_INFO['SAMPLE_RANGE_LIST']
+        NPOINT_LIST = MODULE_INFO['NPOINT_LIST']
+
+
+        new_features_list = []
+        xyz_flipped = xyz.transpose(1, 2).contiguous() 
+        sampled_idx_list = []
+        if ctr_xyz is None:
+            last_sample_end_index = 0
+            
+            for i in range(len(SAMPLE_TYPE_LIST)):
+                sample_type = SAMPLE_TYPE_LIST[i]
+                sample_range = SAMPLE_RANGE_LIST[i]
+                npoint = NPOINT_LIST[i]
+
+                if npoint <= 0:
+                    continue
+                if sample_range == -1: #全部
+                    xyz_tmp = xyz[:, last_sample_end_index:, :]
+                    feature_tmp = features.transpose(1, 2)[:, last_sample_end_index:, :].contiguous()  
+                    cls_features_tmp = cls_features[:, last_sample_end_index:, :] if cls_features is not None else None 
+                else:
+                    xyz_tmp = xyz[:, last_sample_end_index:sample_range, :].contiguous()
+                    feature_tmp = features.transpose(1, 2)[:, last_sample_end_index:sample_range, :]
+                    cls_features_tmp = cls_features[:, last_sample_end_index:sample_range, :] if cls_features is not None else None 
+                    last_sample_end_index += sample_range
+
+                if xyz_tmp.shape[1] <= npoint: # No downsampling
+                    sample_idx = torch.arange(xyz_tmp.shape[1], device=xyz_tmp.device, dtype=torch.int32) * torch.ones(xyz_tmp.shape[0], xyz_tmp.shape[1], device=xyz_tmp.device, dtype=torch.int32)
+
+                elif ('cls' in sample_type) or ('ctr' in sample_type):
+                    cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
+                    score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
+                    score_picked, sample_idx = torch.topk(score_pred, npoint, dim=-1)           
+                    sample_idx = sample_idx.int()
+
+                elif 'D-FPS' in sample_type or 'DFS' in sample_type:
+                    sample_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+
+                elif 'mix' in sample_type.lower():
+                    fps_npoints = int(npoint/2)
+                    ctr_npoints = npoint - fps_npoints
+                    sample_idx_fps = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+                    # ==========
+                    cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
+                    score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
+                    score_picked, sample_idx_ctr = torch.topk(score_pred, ctr_npoints, dim=-1)           
+                    sample_idx_ctr = sample_idx_ctr.int()
+                    sample_idx = torch.cat([sample_idx_fps, sample_idx_ctr], dim=-1)  # [bs, npoint * 2]
+
+                elif 'F-FPS' in sample_type or 'FFS' in sample_type:
+                    features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+                    features_for_fps_distance = self.calc_square_dist(features_SSD, features_SSD)
+                    features_for_fps_distance = features_for_fps_distance.contiguous()
+                    sample_idx = pointnet2_utils.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+
+                elif sample_type == 'FS':
+                    features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+                    features_for_fps_distance = self.calc_square_dist(features_SSD, features_SSD)
+                    features_for_fps_distance = features_for_fps_distance.contiguous()
+                    sample_idx_1 = pointnet2_utils.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+                    sample_idx_2 = pointnet2_utils.furthest_point_sample(xyz_tmp, npoint)
+                    sample_idx = torch.cat([sample_idx_1, sample_idx_2], dim=-1)  # [bs, npoint * 2]
+                elif 'Rand' in sample_type:
+                    sample_idx = torch.randperm(xyz_tmp.shape[1],device=xyz_tmp.device)[None, :npoint].int().repeat(xyz_tmp.shape[0], 1)
+                elif sample_type == 'ds_FPS' or sample_type == 'ds-FPS':
+                    part_num = 4
+                    xyz_div = []
+                    idx_div = []
+                    for i in range(len(xyz_tmp)):
+                        per_xyz = xyz_tmp[i]
+                        radii = per_xyz.norm(dim=-1) -5 
+                        storted_radii, indince = radii.sort(dim=0, descending=False)
+                        per_xyz_sorted = per_xyz[indince]
+                        per_xyz_sorted_div = per_xyz_sorted.view(part_num, -1 ,3)
+
+                        per_idx_div = indince.view(part_num,-1)
+                        xyz_div.append(per_xyz_sorted_div)
+                        idx_div.append(per_idx_div)
+                    xyz_div = torch.cat(xyz_div ,dim=0)
+                    idx_div = torch.cat(idx_div ,dim=0)
+                    idx_sampled = pointnet2_utils.furthest_point_sample(xyz_div, (npoint//part_num))
+
+                    indince_div = []
+                    for idx_sampled_per, idx_per in zip(idx_sampled, idx_div):                    
+                        indince_div.append(idx_per[idx_sampled_per.long()])
+                    index = torch.cat(indince_div, dim=-1)
+                    sample_idx = index.reshape(xyz.shape[0], npoint).int()
+
+                elif sample_type == 'ry_FPS' or sample_type == 'ry-FPS':
+                    part_num = 4
+                    xyz_div = []
+                    idx_div = []
+                    for i in range(len(xyz_tmp)):
+                        per_xyz = xyz_tmp[i]
+                        ry = torch.atan(per_xyz[:,0]/per_xyz[:,1])
+                        storted_ry, indince = ry.sort(dim=0, descending=False)
+                        per_xyz_sorted = per_xyz[indince]
+                        per_xyz_sorted_div = per_xyz_sorted.view(part_num, -1 ,3)
+
+                        per_idx_div = indince.view(part_num,-1)
+                        xyz_div.append(per_xyz_sorted_div)
+                        idx_div.append(per_idx_div)
+                    xyz_div = torch.cat(xyz_div ,dim=0)
+                    idx_div = torch.cat(idx_div ,dim=0)
+                    idx_sampled = pointnet2_utils.furthest_point_sample(xyz_div, (npoint//part_num))
+
+                    indince_div = []
+                    for idx_sampled_per, idx_per in zip(idx_sampled, idx_div):                    
+                        indince_div.append(idx_per[idx_sampled_per.long()])
+                    index = torch.cat(indince_div, dim=-1)
+
+                    sample_idx = index.reshape(xyz.shape[0], npoint).int()
+
+                sampled_idx_list.append(sample_idx)
+
+            sampled_idx_list = torch.cat(sampled_idx_list, dim=-1) 
+            new_xyz = pointnet2_utils.gather_operation(xyz_flipped, sampled_idx_list).transpose(1, 2).contiguous()
+
+        else:
+            new_xyz = ctr_xyz
+
+        return new_xyz,sampled_idx_list
+
+
+    def single_gather_features(self,
+                            MODULE_INFO,
+                            xyz,
+                            new_xyz,
+                            features,
+                            sampled_idx_list):
+        groupers = MODULE_INFO['GROUPING_MODULES']
+        mlps = MODULE_INFO['MLPS']
+        pool_method = MODULE_INFO['POOL_METHOD']
+        confidence_layers = MODULE_INFO['CONFIDENCE_LAYERS']
+        sample_idx = MODULE_INFO['SAMPLE_IDX']
+        radii = MODULE_INFO['RADII']
+        nsamples = MODULE_INFO['nsample']
+
+
+        new_features_list = []
+
+        if len(groupers) > 0:
+            for i in range(len(groupers)):
+                radius = radii[i]
+                nsample = nsamples[i]
+
+                feature_indices = pointnet2_utils.ball_query(
+                    radius=radius,
+                    nsample=nsamples,
+                    xyz=xyz,
+                    new_xyz=new_xyz
+                ).type(torch.int64)
+                
+                group_features = pointnet2_utils.grouping_operation(
+                    features,
+                    feature_indices
+                )
+                new_features_list += [group_features]
+
+                ## lol this does the same thing as group_features :(
+                # #! (B,C,npoints) -> (B,npoints,C)
+                # features_swapped = features.permute(0,2,1)
+                # F = features_swapped.shape[2] 
+
+                # B,N,S = feature_indices.shape
+                # #! (B,N,S) -> (B,N*S,1)
+                # idx_squished = feature_indices.reshape(B,N*S).unsqueeze(2)
+                # idx_expanded = idx_squished.expand((B,N*S,F)).long()
+
+                # features_gathered = torch.gather(features_swapped,-1,idx_expanded)
+
+                # final_features = features_gathered.reshape(B,N,S,F)
+        else:
+            print('this bit might not be working as intended')
+            new_features = pointnet2_utils.gather_operation(features, sampled_idx_list)
+            new_features_list += [new_features]
+
+        # if len(groupers) > 0:
+        #     for i in range(len(groupers)):
+        #         new_features = groupers[i](xyz, new_xyz, features)                
+        #         new_features = mlps[i](new_features) 
+
+        #         if pool_method == 'max_pool':
+        #             new_features = F.max_pool2d(
+        #                 new_features, kernel_size=[1, new_features.size(3)]
+        #             )  # (B, mlp[-1], npoint, 1)
+        #         elif pool_method == 'avg_pool':
+        #             new_features = F.avg_pool2d(
+        #                 new_features, kernel_size=[1, new_features.size(3)]
+        #             )  # (B, mlp[-1], npoint, 1)
+        #         else:
+        #             raise NotImplementedError
+        #         new_features = new_features.squeeze(-1)  # (B, mlp[-1], npoint)
+        #         new_features_list.append(new_features)
+        #     new_features = torch.cat(new_features_list, dim=1)
+        # else:
+        #     new_features = pointnet2_utils.gather_operation(features, sampled_idx_list).contiguous()
+
+        # if confidence_layers is not None:
+        #     cls_features = confidence_layers(new_features).transpose(1, 2)
+            
+        # else:
+        #     cls_features = None
+
+        # if sample_idx:
+        #     return new_xyz, new_features, cls_features, sampled_idx_list
+        # else:
+        #     return new_xyz, new_features, cls_features
+        return new_features_list
+
+
+    def build_attention_modules(self):
+        
+        self.radarCrosslidar = nn.ModuleList()
+        self.lidarCrossradar = nn.ModuleList()
+
+        #! Assumes out MLP is same for lidar and radar
+        MLPS = self.RADAR_MODULES['MLPS']
+        for i in range(MLPS):
+            dim = MLPS[i]
+            self.radarCrosslidar.append(nn.MultiheadAttention(dim,8))
+            self.lidarCrossradar.append(nn.MultiheadAttention(dim,8))            
+                
+    def apply_cross_attention(self,radar_features:List[torch.Tensor],lidar_features:List[torch.Tensor]):
+
+        
+
+
+        B = radar_features[0].shape[0] # num batches
+        G = radar_features[0].shape[2] # number of groups/clusters
+
+
+        radar_outputs = []
+        lidar_outputs = []
+        for i in range(len(radar_features)):
+            
+            radar_attn_list = []
+            lidar_attn_list = []
+            for batch in range(B):            
+                    # dims, Groups(batch), npoints -> npoints, groups, dims
+                r2l_attn = self.radarCrosslidar[i]
+                l2r_attn = self.lidarCrossradar[i]
+
+                radar_feats = radar_features[i][batch].permute(2,1,0)
+                lidar_feats = lidar_features[i][batch].permute(2,1,0)
+
+
+                r2l_output, _ = r2l_attn(radar_feats,lidar_feats,lidar_feats)
+                l2r_output, _ = l2r_attn(lidar_feats,radar_feats,radar_feats)
+                radar_attn_list += [r2l_attn]
+                lidar_attn_list += [l2r_attn]
+            
+            radar_outputs += [torch.stack(radar_attn_list)]
+            lidar_outputs += [torch.stack(lidar_attn_list)]
+        
+        
+        return
+
+
+
+    def __init__(self, *,
+                radar_settings,
+                lidar_settings):
+        super().__init__()
+
+        assert len(radar_settings == lidar_settings)
+
+
+        self.RADAR_MODULES = self.build_sa_modules(*radar_settings) 
+        self.LIDAR_MODULES = self.build_sa_modules(*lidar_settings)
+        
+        # Builds attention modules 
+        self.build_attention_modules()
+
+    def forward(self,
+                lidar_xyz: torch.Tensor,
+                radar_xyz: torch.Tensor,
+                lidar_features: torch.Tensor = None,
+                lidar_cls_features: torch.Tensor = None,
+                lidar_new_xyz = None,
+                lidar_ctr_xyz = None,
+                radar_features: torch.Tensor = None,
+                radar_cls_features: torch.Tensor = None,
+                radar_new_xyz = None,
+                radar_ctr_xyz = None,    
+                ):
+
+        
+        radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
+                                                        self.RADAR_MODULES,
+                                                        radar_xyz,
+                                                        radar_features,
+                                                        radar_cls_features,
+                                                        radar_new_xyz,
+                                                        radar_ctr_xyz)
+    
+        lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
+                                                        self.LIDAR_MODULES,
+                                                        lidar_xyz,
+                                                        lidar_features,
+                                                        lidar_cls_features,
+                                                        lidar_new_xyz,
+                                                        lidar_ctr_xyz)
+        
+        radar_gathered_features = self.single_gather_features(
+                                            self.RADAR_MODULES,
+                                            xyz=radar_xyz,
+                                            new_xyz=radar_new_xyz,
+                                            features=radar_features,
+                                            sampled_idx_list = radar_sampled_idx_list)
+
+        lidar_gathered_features = self.single_gather_features(
+                                            self.LIDAR_MODULES,
+                                            xyz=lidar_xyz,
+                                            new_xyz=lidar_new_xyz,
+                                            features=lidar_features,
+                                            sampled_idx_list = radar_sampled_idx_list)
+
+
+        assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
+
+        
+        
+
+
+
+
+
+
+
 class Vote_layer3DSSD(nn.Module):
     def __init__(self, mlp_list, pre_channel, max_translate_range):
         super().__init__()

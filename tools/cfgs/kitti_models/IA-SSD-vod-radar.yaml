@@ -2,7 +2,7 @@ CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 # CLASS_NAMES: ['Car']
 
 DATA_CONFIG:
-    _BASE_CONFIG_: tools/cfgs/dataset_configs/vod_radar_dataset_iassd.yaml
+    _BASE_CONFIG_: '/workspaces/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_radar_dataset.yaml'
 
     DATA_PROCESSOR:
         -   NAME: mask_points_and_boxes_outside_range
