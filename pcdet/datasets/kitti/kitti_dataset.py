@@ -97,7 +97,7 @@ class KittiDataset(DatasetTemplate):
 
     def get_attach_radar(self, idx):
         # create soft link for attach_lidar
-        lidar_file = self.root_split_path / 'attach_lidar' / ('%s.bin' % idx)
+        lidar_file = self.root_split_path / 'attach_radar' / ('%s.bin' % idx)
         used_feature_list = self.dataset_cfg.get('ATTACH_USED_FEATURE_LIST',['x','y','z','RCS','v_r_compensated'])
         radar_points = np.fromfile(str(lidar_file), dtype=np.float32).reshape(-1, 7)
         
