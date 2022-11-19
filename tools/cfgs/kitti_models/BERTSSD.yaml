@@ -2,32 +2,35 @@ CLASS_NAMES: ['Car','Pedestrian', 'Cyclist']
 
 
 DATA_CONFIG:
-	_BASE_CONFIG_: /workspaces/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_lidar_dataset.yaml
-	USE_VOD_EVAL: True
-	DATA_PROCESSOR:
-		-   NAME: mask_points_and_boxes_outside_range
-			REMOVE_OUTSIDE_BOXES: True
-	
-		-   NAME: sample_points
-			NUM_POINTS: {
-				'train': 80000, # using waymo config
-				'test': 80000
-			}
+    _BASE_CONFIG_: "/workspaces/CenterPoint-KITTI/tools/cfgs/dataset_configs/vod_lidar_dataset.yaml"
+    USE_VOD_EVAL: True
+    DATA_PROCESSOR:
+        -   NAME: mask_points_and_boxes_outside_range
+            REMOVE_OUTSIDE_BOXES: True
+    
+        -   NAME: sample_points
+            NUM_POINTS: {
+                'train': 80000, # using waymo config
+                'test': 80000
+            }
 
-		-   NAME: shuffle_points
-			SHUFFLE_ENABLED: {
-				'train': True,
-				'test': False
-			}
+        -   NAME: shuffle_points
+            SHUFFLE_ENABLED: {
+                'train': True,
+                'test': False
+            }
+
+USE_ATTACH: True
 
 
-MODEL: BERTSSD
-	BACKBONE_3D:
-		NAME: BERTSSD_Backbone
-		# * LiDAR set abstraction config
-		LIDAR_SA_CONFIG:
-			POINT_INPUT_FEATURES: 4
-			# Sampling setting:
+MODEL: 
+    NAME: BERTSSD
+    BACKBONE_3D:
+        NAME: BERTSSD_Backbone
+        # * LiDAR set abstraction config
+        LIDAR_SA_CONFIG:
+            POINT_INPUT_FEATURES: 4
+            # Sampling setting:
             NPOINT_LIST: [[4096], [1024], [512], [256], [-1], [256]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
             SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
@@ -50,13 +53,14 @@ MODEL: BERTSSD
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
             # SAVE_SAMPLE_LIST: True
 
-		# * Radar set abstraction config
+        # * Radar set abstraction config
         RADAR_SA_CONFIG:
-			POINT_INPUT_FEATURES: 5
+            POINT_INPUT_FEATURES: 5
             # Sampling setting:
             NPOINT_LIST: [[512], [512], [256], [128], [-1], [128]]
             SAMPLE_RANGE_LIST: [[-1], [-1], [-1], [-1], [-1], [-1]]
-            SAMPLE_METHOD_LIST: &sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+            # SAMPLE_METHOD_LIST: *sample_method_list [['D-FPS'], ['D-FPS'], ['ctr_aware'], ['ctr_aware'], [], []]
+            SAMPLE_METHOD_LIST: *sample_method_list 
             # Group and Abstraction setting:
             RADIUS_LIST: [[0.2,0.8], [0.8,1.6], [1.6,4.8], [], [], [4.8, 6.4]]
             NSAMPLE_LIST: [[16,32], [16,32], [16,32], [], [], [16, 32]]            
@@ -78,9 +82,9 @@ MODEL: BERTSSD
             MAX_TRANSLATE_RANGE: [3.0, 3.0, 2.0]
             # SAVE_SAMPLE_LIST: True
 
-	POINT_HEAD:
+    POINT_HEAD:
         NAME: IASSD_Head
-	    CLS_FC: [256, 256]
+        CLS_FC: [256, 256]
         REG_FC: [256, 256]
         CLASS_AGNOSTIC: False
         USE_POINT_FEATURES_BEFORE_FUSION: False

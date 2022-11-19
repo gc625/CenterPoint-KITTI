@@ -13,7 +13,7 @@ from .IASSD_GAN import IASSD_GAN
 # from .IASSD_GAN_tidying import IASSD_GAN_clean
 from .point_3DSSD import Point3DSSD
 from .RaDet import RaDet
-
+from .BERTSSD import BERTSSD
 __all__ = {
     'Detector3DTemplate': Detector3DTemplate,
     'DetectorXTemplate': DetectorX_template,
@@ -29,7 +29,8 @@ __all__ = {
     'IASSDGAN': IASSD_GAN,
     # 'IASSDGAN_clean': IASSD_GAN_clean,
     '3DSSD': Point3DSSD,
-    'RaDet': RaDet
+    'RaDet': RaDet,
+    'BERTSSD': BERTSSD
 }
 
 

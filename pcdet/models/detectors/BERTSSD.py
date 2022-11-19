@@ -16,7 +16,7 @@ class BERTSSD(Detector3DTemplate):
     def __init__(self, model_cfg, num_class, dataset, tb_log=None):
         super().__init__(model_cfg=model_cfg, num_class=num_class, dataset=dataset)
         
-        print('Start building IA-SSD-GAN') 
+        print('Start building BERTSSD') 
         # Tensorboard + Debug 
         self.tb_log = tb_log
         self.debug = self.model_cfg.get('DEBUG', False)
@@ -30,55 +30,62 @@ class BERTSSD(Detector3DTemplate):
 
         self.module_list = self.build_networks()
         
-        # Attach Network
-        self.attach_module_topology = ['backbone_3d']
-        self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
-        self.attach_model_cfg.BACKBONE_3D['num_class'] = num_class        
-        self.attach_model = None if model_cfg.get('DISABLE_ATTACH') else self.build_attach_network()[0] # idx becos it reutrns bb in list 
+
         
 
-        self.radar_
 
 
 
-        # Shared Head
-        self.shared_module_topology = ['point_head']
-        shared_head = self.build_shared_head()
-        self.shared_head = None if len(shared_head) == 0 else shared_head[0] 
+
+
+
+
+
+
+
+        # # Attach Network
+        # self.attach_module_topology = ['backbone_3d']
+        # self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
+        # self.attach_model_cfg.BACKBONE_3D['num_class'] = num_class        
+        # self.attach_model = None if model_cfg.get('DISABLE_ATTACH') else self.build_attach_network()[0] # idx becos it reutrns bb in list 
+        # # Shared Head
+        # self.shared_module_topology = ['point_head']
+        # shared_head = self.build_shared_head()
+        # self.shared_head = None if len(shared_head) == 0 else shared_head[0] 
         
-        # ? Not sure if used
-        self.cross_over_cfg = self.model_cfg.CROSS_OVER 
+        # # ? Not sure if used
+        # self.cross_over_cfg = self.model_cfg.CROSS_OVER 
         
         # Feature augmentation for feature detection
-        self.use_feature_aug = model_cfg.get('USE_FEAT_AUG', False)
+        # self.use_feature_aug = model_cfg.get('USE_FEAT_AUG', False)
         
-        print('Done building IA-SSD-GAN')   
+        print('done build bertssd')   
         
         # Visualization settings
-        self.vis_cnt = 0 
-        self.vis_interval = 100 # in unit batch
-        self.class_names = model_cfg.get('CLASS_NAMES', None)
+        # self.vis_cnt = 0 
+        # self.vis_interval = 100 # in unit batch
+        # self.class_names = model_cfg.get('CLASS_NAMES', None)
         
 
-    def load_radar_network(self):
-        num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
-        # print(f"ATTACH NUM FEATS {num_feats}")
-        model_info_dict = {
-            'module_list': [],
-            'num_rawpoint_features': num_feats,
-            'num_point_features': num_feats,
-            'grid_size': self.dataset.grid_size,
-            'point_cloud_range': self.dataset.point_cloud_range,
-            'voxel_size': self.dataset.voxel_size,
-            'is_attach': True
-        }
-        for module_name in self.attach_module_topology:
-            module, model_info_dict = getattr(self, 'build_%s' % module_name)(
-                model_info_dict=model_info_dict
-            )
-            full_module_name = 'attach_' + module_name
-            self.add_module(full_module_name, module)
-        return model_info_dict['module_list']
+    # def load_radar_network(self):
+    #     num_feats = self.attach_model_cfg.get('NUM_POINT_FEATURES',4) 
+    #     # print(f"ATTACH NUM FEATS {num_feats}")
+    #     model_info_dict = {
+    #         'module_list': [],
+    #         'num_rawpoint_features': num_feats,
+    #         'num_point_features': num_feats,
+    #         'grid_size': self.dataset.grid_size,
+    #         'point_cloud_range': self.dataset.point_cloud_range,
+    #         'voxel_size': self.dataset.voxel_size,
+    #         'is_attach': True
+    #     }
+    #     for module_name in self.attach_module_topology:
+    #         module, model_info_dict = getattr(self, 'build_%s' % module_name)(
+    #             model_info_dict=model_info_dict
+    #         )
+    #         full_module_name = 'attach_' + module_name
+    #         self.add_module(full_module_name, module)
+    #     return model_info_dict['module_list']
 
 
 

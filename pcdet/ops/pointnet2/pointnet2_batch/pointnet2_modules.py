@@ -873,7 +873,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         POOL_METHOD = pool_method
 
-        if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(self.mlps) > 0):
+        if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(MLPS) > 0):
             shared_mlp = []
             for k in range(len(aggregation_mlp)):
                 shared_mlp.extend([
@@ -1156,8 +1156,9 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         #! Assumes out MLP is same for lidar and radar
         MLPS = self.RADAR_MODULES['MLPS']
-        for i in range(MLPS):
-            dim = MLPS[i]
+        for i in range(len(MLPS)):
+            # dim = MLPS[i]
+            dim = MLPS[i][6].out_channels
             self.radarCrosslidar.append(nn.MultiheadAttention(dim,8))
             self.lidarCrossradar.append(nn.MultiheadAttention(dim,8))            
                 
@@ -1203,7 +1204,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 lidar_settings):
         super().__init__()
 
-        assert len(radar_settings == lidar_settings)
+        assert len(radar_settings) == len(lidar_settings), "setting lengths dont match"
 
 
         self.RADAR_MODULES = self.build_sa_modules(*radar_settings) 
@@ -1213,51 +1214,61 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.build_attention_modules()
 
     def forward(self,
-                lidar_xyz: torch.Tensor,
-                radar_xyz: torch.Tensor,
-                lidar_features: torch.Tensor = None,
-                lidar_cls_features: torch.Tensor = None,
-                lidar_new_xyz = None,
-                lidar_ctr_xyz = None,
-                radar_features: torch.Tensor = None,
-                radar_cls_features: torch.Tensor = None,
-                radar_new_xyz = None,
-                radar_ctr_xyz = None,    
+                batch_dict
+                # lidar_xyz: torch.Tensor,
+                # radar_xyz: torch.Tensor,
+                # lidar_features: torch.Tensor = None,
+                # lidar_cls_features: torch.Tensor = None,
+                # lidar_new_xyz = None,
+                # lidar_ctr_xyz = None,
+                # radar_features: torch.Tensor = None,
+                # radar_cls_features: torch.Tensor = None,
+                # radar_new_xyz = None,
+                # radar_ctr_xyz = None,    
                 ):
 
+        lidar_xyz = batch_dict
+        # radar_xyz =
+        # lidar_features =
+        # lidar_cls_features
+        # lidar_new_xyz = None,
+        # lidar_ctr_xyz = None,
+        # radar_features: torch.Tensor = None,
+        # radar_cls_features: torch.Tensor = None,
+        # radar_new_xyz = None,
         
-        radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
-                                                        self.RADAR_MODULES,
-                                                        radar_xyz,
-                                                        radar_features,
-                                                        radar_cls_features,
-                                                        radar_new_xyz,
-                                                        radar_ctr_xyz)
+        # radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
+        #                                                 self.RADAR_MODULES,
+        #                                                 radar_xyz,
+        #                                                 radar_features,
+        #                                                 radar_cls_features,
+        #                                                 radar_new_xyz,
+        #                                                 radar_ctr_xyz)
     
-        lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
-                                                        self.LIDAR_MODULES,
-                                                        lidar_xyz,
-                                                        lidar_features,
-                                                        lidar_cls_features,
-                                                        lidar_new_xyz,
-                                                        lidar_ctr_xyz)
+        # lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
+        #                                                 self.LIDAR_MODULES,
+        #                                                 lidar_xyz,
+        #                                                 lidar_features,
+        #                                                 lidar_cls_features,
+        #                                                 lidar_new_xyz,
+        #                                                 lidar_ctr_xyz)
         
-        radar_gathered_features = self.single_gather_features(
-                                            self.RADAR_MODULES,
-                                            xyz=radar_xyz,
-                                            new_xyz=radar_new_xyz,
-                                            features=radar_features,
-                                            sampled_idx_list = radar_sampled_idx_list)
+        # radar_gathered_features = self.single_gather_features(
+        #                                     self.RADAR_MODULES,
+        #                                     xyz=radar_xyz,
+        #                                     new_xyz=radar_new_xyz,
+        #                                     features=radar_features,
+        #                                     sampled_idx_list = radar_sampled_idx_list)
 
-        lidar_gathered_features = self.single_gather_features(
-                                            self.LIDAR_MODULES,
-                                            xyz=lidar_xyz,
-                                            new_xyz=lidar_new_xyz,
-                                            features=lidar_features,
-                                            sampled_idx_list = radar_sampled_idx_list)
+        # lidar_gathered_features = self.single_gather_features(
+        #                                     self.LIDAR_MODULES,
+        #                                     xyz=lidar_xyz,
+        #                                     new_xyz=lidar_new_xyz,
+        #                                     features=lidar_features,
+        #                                     sampled_idx_list = radar_sampled_idx_list)
 
 
-        assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
+        # assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
         
         
