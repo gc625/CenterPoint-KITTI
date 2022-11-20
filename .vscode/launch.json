@@ -13,13 +13,17 @@
             "justMyCode": true,
             "args": [
                 "--cfg_file", "/workspaces/CenterPoint-KITTI/tools/cfgs/kitti_models/BERTSSD.yaml", 
-                // "--epoch", "20", 
+                "--epoch", "20", 
                 "--workers", "0", 
                 "--extra_tag", "debug",
-                "--batch_size", "6",
+                "--batch_size", "1",
                 // "--save_to_file",
                 // "--ckpt", "/root/dj/code/CenterPoint-KITTI/output/IA-SSD-GAN-vod-aug/debug/ckpt/checkpoint_epoch_11.pth"
                 // "--pretrained_model", "/workspaces/CenterPoint-KITTI/output/IA-SSD-vod-lidar/debug_new/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
+                // ###################CFAR
+                // "--cfg_file", "/workspaces/CenterPoint-KITTI/tools/cfgs/kitti_models/CFAR-radar-512.yaml",
+                // "--workers", "0",
+                // "--pretrained_model", "/workspaces/CenterPoint-KITTI/output/IA-SSD-vod-radar/debug_new/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth"
             ],
             "env": {"PYTHONPATH": "${workspaceFolder}${pathSeparator}${env:PYTHONPATH}"}
         }

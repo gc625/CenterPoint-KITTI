@@ -25,7 +25,7 @@ class BERTSSD(Detector3DTemplate):
         # Used modules: bb_3d, feature_aug, point_head
         self.module_topology = [
             'vfe', 'backbone_3d', 'map_to_bev_module', 'pfe',
-            'backbone_2d', 'feature_aug', 'dense_head',  'point_head', 'roi_head'
+            'backbone_2d', 'dense_head',  'point_head', 'roi_head'
         ]
 
         self.module_list = self.build_networks()
@@ -235,13 +235,13 @@ class BERTSSD(Detector3DTemplate):
         """
         batch_dict: dict = ['points', 'frame_id', 'attach', 'gt_boxes', 'use_lead_xyz', 'image_shape', 'batch_size']
         """
-        if self.use_feature_aug & self.training:
-            if self.attach_model is not None:
-                transfer_dict = self.get_transfer_feature(batch_dict)
-                # self.print_shapes(batch_dict)
-                # print('TRANSFER DICT')
-                # self.print_shapes(transfer_dict)
-                batch_dict['att'] = transfer_dict
+        # if self.use_feature_aug & self.training:
+        #     if self.attach_model is not None:
+        #         transfer_dict = self.get_transfer_feature(batch_dict)
+        #         # self.print_shapes(batch_dict)
+        #         # print('TRANSFER DICT')
+        #         # self.print_shapes(transfer_dict)
+        #         batch_dict['att'] = transfer_dict
         for cur_module in self.module_list:
             
             batch_dict = cur_module(batch_dict)

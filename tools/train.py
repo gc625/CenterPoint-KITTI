@@ -155,9 +155,9 @@ def main():
         else:
             model.load_params_from_file(filename=args.pretrained_model, to_cpu=dist, logger=logger)
 
-    if cfg.get('USE_ATTACH', False):
-        logger.info('===> Loading ckpt for attached model')
-        model.load_ckpt_to_attach(cfg.MODEL.ATTACH_NETWORK.CKPT_FILE, logger)
+    # if cfg.get('USE_ATTACH', False):
+        # logger.info('===> Loading ckpt for attached model')
+        # model.load_ckpt_to_attach(cfg.MODEL.ATTACH_NETWORK.CKPT_FILE, logger)
 
     if cfg.get('BACKBONE_CKPT', False):
         logger.info('===> Loading ckpt for main backbone')

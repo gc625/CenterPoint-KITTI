@@ -868,7 +868,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                     nn.BatchNorm2d(mlp_spec[k + 1]),
                     nn.ReLU()
                 ])
-            MLPS.append(nn.Sequential(*shared_mlps))
+            MLPS.append(nn.Sequential(*shared_mlps).to('cuda'))
             out_channels += mlp_spec[-1]
 
         POOL_METHOD = pool_method
@@ -1074,30 +1074,37 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         confidence_layers = MODULE_INFO['CONFIDENCE_LAYERS']
         sample_idx = MODULE_INFO['SAMPLE_IDX']
         radii = MODULE_INFO['RADII']
-        nsamples = MODULE_INFO['nsample']
+        nsamples = MODULE_INFO['NSAMPLES']
 
 
         new_features_list = []
-
+        # sampled_features_indices = []
         if len(groupers) > 0:
             for i in range(len(groupers)):
                 radius = radii[i]
                 nsample = nsamples[i]
-
-                feature_indices = pointnet2_utils.ball_query(
-                    radius=radius,
-                    nsample=nsamples,
-                    xyz=xyz,
-                    new_xyz=new_xyz
-                ).type(torch.int64)
                 
-                group_features = pointnet2_utils.grouping_operation(
-                    features,
-                    feature_indices
-                )
-                new_features_list += [group_features]
+                grouped_features = groupers[i](xyz,new_xyz,features)
+                new_features = mlps[i](grouped_features)
+                new_features_list += [new_features]
+                # features = 
 
+
+                # feature_indices = pointnet2_utils.ball_query(
+                #     radius,
+                #     nsample,
+                #     xyz,
+                #     new_xyz
+                # ).type(torch.int)
+                
+                # group_features = pointnet2_utils.grouping_operation(
+                #     features,
+                #     feature_indices
+                # )
+                # new_features_list += [group_features]
+                # sampled_features_indices += [feature_indices]
                 ## lol this does the same thing as group_features :(
+
                 # #! (B,C,npoints) -> (B,npoints,C)
                 # features_swapped = features.permute(0,2,1)
                 # F = features_swapped.shape[2] 
@@ -1112,8 +1119,9 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 # final_features = features_gathered.reshape(B,N,S,F)
         else:
             print('this bit might not be working as intended')
-            new_features = pointnet2_utils.gather_operation(features, sampled_idx_list)
-            new_features_list += [new_features]
+            raise RuntimeError('reached wrong gathering step')
+            # new_features = pointnet2_utils.gather_operation(features, sampled_idx_list)
+            # new_features_list += [new_features]
 
         # if len(groupers) > 0:
         #     for i in range(len(groupers)):
@@ -1162,7 +1170,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             self.radarCrosslidar.append(nn.MultiheadAttention(dim,8))
             self.lidarCrossradar.append(nn.MultiheadAttention(dim,8))            
                 
-    def apply_cross_attention(self,radar_features:List[torch.Tensor],lidar_features:List[torch.Tensor]):
+    def attention_and_pool(self,radar_features:List[torch.Tensor],lidar_features:List[torch.Tensor]):
 
         
 
@@ -1188,14 +1196,14 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
                 r2l_output, _ = r2l_attn(radar_feats,lidar_feats,lidar_feats)
                 l2r_output, _ = l2r_attn(lidar_feats,radar_feats,radar_feats)
-                radar_attn_list += [r2l_attn]
-                lidar_attn_list += [l2r_attn]
+                radar_attn_list += [r2l_output.permute(1,2,0)]
+                lidar_attn_list += [l2r_output.permute(1,2,0)]
             
             radar_outputs += [torch.stack(radar_attn_list)]
             lidar_outputs += [torch.stack(lidar_attn_list)]
+
         
-        
-        return
+        return lidar_outputs,radar_outputs
 
 
 
@@ -1213,21 +1221,34 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         # Builds attention modules 
         self.build_attention_modules()
 
+
+    def match_clusters(self,lidar_new_xyz,radar_new_xyz):
+
+
+        
+        
+        radar_for_lidar = radar_new_xyz
+        lidar_for_radar = lidar_new_xyz
+
+        return radar_for_lidar,lidar_for_radar
+
+
+
+
     def forward(self,
-                batch_dict
-                # lidar_xyz: torch.Tensor,
-                # radar_xyz: torch.Tensor,
-                # lidar_features: torch.Tensor = None,
-                # lidar_cls_features: torch.Tensor = None,
-                # lidar_new_xyz = None,
-                # lidar_ctr_xyz = None,
-                # radar_features: torch.Tensor = None,
-                # radar_cls_features: torch.Tensor = None,
-                # radar_new_xyz = None,
-                # radar_ctr_xyz = None,    
+                lidar_xyz: torch.Tensor,
+                radar_xyz: torch.Tensor,
+                lidar_features: torch.Tensor = None,
+                lidar_cls_features: torch.Tensor = None,
+                lidar_new_xyz = None,
+                lidar_ctr_xyz = None,
+                radar_features: torch.Tensor = None,
+                radar_cls_features: torch.Tensor = None,
+                radar_new_xyz = None,
+                radar_ctr_xyz = None,    
                 ):
 
-        lidar_xyz = batch_dict
+        # lidar_xyz = batch_dict
         # radar_xyz =
         # lidar_features =
         # lidar_cls_features
@@ -1237,41 +1258,57 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         # radar_cls_features: torch.Tensor = None,
         # radar_new_xyz = None,
         
-        # radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
-        #                                                 self.RADAR_MODULES,
-        #                                                 radar_xyz,
-        #                                                 radar_features,
-        #                                                 radar_cls_features,
-        #                                                 radar_new_xyz,
-        #                                                 radar_ctr_xyz)
+        radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
+                                                        self.RADAR_MODULES,
+                                                        radar_xyz,
+                                                        radar_features,
+                                                        radar_cls_features,
+                                                        radar_new_xyz,
+                                                        radar_ctr_xyz)
     
-        # lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
-        #                                                 self.LIDAR_MODULES,
-        #                                                 lidar_xyz,
-        #                                                 lidar_features,
-        #                                                 lidar_cls_features,
-        #                                                 lidar_new_xyz,
-        #                                                 lidar_ctr_xyz)
+        lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
+                                                        self.LIDAR_MODULES,
+                                                        lidar_xyz,
+                                                        lidar_features,
+                                                        lidar_cls_features,
+                                                        lidar_new_xyz,
+                                                        lidar_ctr_xyz)
         
-        # radar_gathered_features = self.single_gather_features(
-        #                                     self.RADAR_MODULES,
-        #                                     xyz=radar_xyz,
-        #                                     new_xyz=radar_new_xyz,
-        #                                     features=radar_features,
-        #                                     sampled_idx_list = radar_sampled_idx_list)
 
-        # lidar_gathered_features = self.single_gather_features(
-        #                                     self.LIDAR_MODULES,
-        #                                     xyz=lidar_xyz,
-        #                                     new_xyz=lidar_new_xyz,
-        #                                     features=lidar_features,
-        #                                     sampled_idx_list = radar_sampled_idx_list)
+        self.match_clusters(lidar_new_xyz,radar_new_xyz)        
+
+        # OUTPUT IS list of num_radii tensors
+        radar_gathered_features = self.single_gather_features(
+                                            self.RADAR_MODULES,
+                                            xyz=radar_xyz,
+                                            new_xyz=radar_new_xyz,
+                                            features=radar_features,
+                                            sampled_idx_list = radar_sampled_idx_list)
+
+        lidar_gathered_features = self.single_gather_features(
+                                            self.LIDAR_MODULES,
+                                            xyz=lidar_xyz,
+                                            new_xyz=lidar_new_xyz,
+                                            features=lidar_features,
+                                            sampled_idx_list = lidar_sampled_idx_list)
+
+        assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
+
+        lidar_feat_post_attn,radar_feat_post_attn = self.attention_and_pool(radar_gathered_features,lidar_gathered_features)
 
 
-        # assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
+
+
+
+
+        ret_dict = {
+            'lidar': (lidar_new_xyz,lidar_features,lidar_cls_pred),
+            'radar': (radar_new_xyz,radar_features,radar_cls_pred),
+        }
         
-        
+
+        return ret_dict
 
 
 
@@ -1320,6 +1357,12 @@ class Vote_layer3DSSD(nn.Module):
         # print(f'in Vote module, ctr_offset shape: {ctr_offsets.shape}')
         # print('='*70)
         return xyz, new_features, ctr_offsets
+
+
+
+
+
+
 
 class Vote_layer(nn.Module):
     """ Light voting module with limitation"""
@@ -1374,6 +1417,43 @@ class Vote_layer(nn.Module):
         if torch.isnan(vote_xyz).sum() > 0:
             raise RuntimeError('Nan in vote_xyz')
         return vote_xyz, new_features, xyz_select, ctr_offsets
+
+
+
+class Double_Vote_layer(nn.Module):
+    """
+    Alias for voting module with two point clouds
+    """
+
+    def __init__(self,
+                lidar_mlp_list,
+                lidar_prechannel,
+                lidar_max_translate_range,
+                radar_mlp_list,
+                radar_prechannel,
+                radar_max_translate_range,
+                ):
+
+        super().__init__()
+        self.lidar_vote_layer = Vote_layer(lidar_mlp_list,lidar_prechannel,lidar_max_translate_range)
+        self.radar_vote_layer = Vote_layer(radar_mlp_list,radar_prechannel,radar_max_translate_range)
+        
+
+
+    def forward(self, lidar_xyz, radar_xyz, lidar_features, radar_features):
+
+        lidar_vote_xyz, lidar_new_features, lidar_xyz_select, lidar_ctr_offsets = self.lidar_vote_layer(lidar_xyz,lidar_features)
+        radar_vote_xyz, radar_new_features, radar_xyz_select, radar_ctr_offsets = self.radar_vote_layer(radar_xyz,radar_features)
+
+
+        ret_dict = {
+            'lidar': (lidar_vote_xyz, lidar_new_features, lidar_xyz_select, lidar_ctr_offsets),
+            'radar': (radar_vote_xyz, radar_new_features, radar_xyz_select, radar_ctr_offsets)
+        }
+
+        return ret_dict
+
+
 
 class Fusion_Layer(nn.Module):
     def __init__(self,
