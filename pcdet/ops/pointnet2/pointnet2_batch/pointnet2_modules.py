@@ -877,13 +877,13 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             shared_mlp = []
             for k in range(len(aggregation_mlp)):
                 shared_mlp.extend([
-                    nn.Conv1d(out_channels,
+                    nn.Conv1d(out_channels*2, #! MULT 2 HERE FOR EXTRA ATTENTION FEATURE
                               aggregation_mlp[k], kernel_size=1, bias=False),
                     nn.BatchNorm1d(aggregation_mlp[k]),
                     nn.ReLU()
                 ])
                 out_channels = aggregation_mlp[k]
-            AGGREGATION_LAYER = nn.Sequential(*shared_mlp)
+            AGGREGATION_LAYER = nn.Sequential(*shared_mlp).to('cuda')
         else:
             AGGREGATION_LAYER = None
 
@@ -891,7 +891,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             shared_mlp = []
             for k in range(len(confidence_mlp)):
                 shared_mlp.extend([
-                    nn.Conv1d(out_channels,
+                    nn.Conv1d(out_channels, 
                               confidence_mlp[k], kernel_size=1, bias=False),
                     nn.BatchNorm1d(confidence_mlp[k]),
                     nn.ReLU()
@@ -900,7 +900,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             shared_mlp.append(
                 nn.Conv1d(out_channels, num_class, kernel_size=1, bias=True),
             )
-            CONFIDENCE_LAYERS = nn.Sequential(*shared_mlp)
+            CONFIDENCE_LAYERS = nn.Sequential(*shared_mlp).to('cuda')
         else:
             CONFIDENCE_LAYERS = None
 
@@ -1207,6 +1207,28 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
 
+    def single_attention(self,q_features,kv_features,attention_modules):
+
+
+        B = q_features[0].shape[0]
+
+        ret = []
+        for i in range(len(q_features)):
+            attn_list = []
+
+            for batch in range(B):
+                Q = q_features[i][batch].permute(2,1,0)
+                KV = kv_features[i][batch].permute(2,1,0)
+
+                attn, weights = attention_modules[i](Q,KV,KV)
+                
+                attn_list += [attn.permute(2,1,0)]
+            
+            ret += [torch.stack(attn_list)]
+        
+
+        return ret
+
     def __init__(self, *,
                 radar_settings,
                 lidar_settings):
@@ -1226,14 +1248,34 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
         
+                                                                                    # selecting lidar point FOR EACH radar
+        lidar_for_radar = pointnet2_utils.ball_query(self.RADAR_MODULES['RADII'][-1],1,lidar_new_xyz,radar_new_xyz)
+                                                                                    # selecting radar point FOR EACH lidar
+        radar_for_lidar = pointnet2_utils.ball_query(self.RADAR_MODULES['RADII'][-1],1,radar_new_xyz,lidar_new_xyz)
         
-        radar_for_lidar = radar_new_xyz
-        lidar_for_radar = lidar_new_xyz
-
+    
         return radar_for_lidar,lidar_for_radar
 
+    def single_pool_and_aggregate(self,feature_list,pool_method,aggregation_layer):
+
+        new_feature_list = []
+        for i in range(len(feature_list)):
+            features = feature_list[i]
+            if pool_method == 'max_pool':
+                new_features = F.max_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            elif pool_method == 'avg_pool':
+                new_features = F.avg_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            new_feature_list += [new_features.squeeze(-1)]
 
 
+        final_features = torch.cat(new_feature_list,dim=1) 
+        final_features = aggregation_layer(final_features)
+        
+        return final_features
 
     def forward(self,
                 lidar_xyz: torch.Tensor,
@@ -1248,16 +1290,16 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 radar_ctr_xyz = None,    
                 ):
 
-        # lidar_xyz = batch_dict
-        # radar_xyz =
-        # lidar_features =
-        # lidar_cls_features
-        # lidar_new_xyz = None,
-        # lidar_ctr_xyz = None,
-        # radar_features: torch.Tensor = None,
-        # radar_cls_features: torch.Tensor = None,
-        # radar_new_xyz = None,
+        '''
+        lidar_xyz: [B,npoints_l,3]
+        radar_xyz: [B,npoints_r,3]
+        lidar_features: [B,1,npoints_l]
+        radar_features: [B,2,npoints_r]
+        '''
+
         
+
+        #@ [B,512,3]         [B,512]
         radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
                                                         self.RADAR_MODULES,
                                                         radar_xyz,
@@ -1265,7 +1307,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                                                         radar_cls_features,
                                                         radar_new_xyz,
                                                         radar_ctr_xyz)
-    
+        #@ [B,4096,3]        [B,4096]
         lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
                                                         self.LIDAR_MODULES,
                                                         lidar_xyz,
@@ -1274,10 +1316,20 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                                                         lidar_new_xyz,
                                                         lidar_ctr_xyz)
         
+        # import numpy as np
+        # np.save('lidar_xyz',lidar_xyz.cpu().numpy())
+        # np.save('lidar_new_xyz',lidar_new_xyz.cpu().numpy())
+        # np.save('radar_xyz',radar_xyz.cpu().numpy())
+        # np.save('radar_new_xyz',radar_new_xyz.cpu().numpy())
 
-        self.match_clusters(lidar_new_xyz,radar_new_xyz)        
+        #@ [B,4096,1]     [B,512,1]
+        radar_for_lidar,lidar_for_radar = self.match_clusters(lidar_new_xyz,radar_new_xyz)        
+
 
         # OUTPUT IS list of num_radii tensors
+
+
+        #@ LIST[ (B,32,512,16),(B,64,512,32)]
         radar_gathered_features = self.single_gather_features(
                                             self.RADAR_MODULES,
                                             xyz=radar_xyz,
@@ -1285,6 +1337,8 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                                             features=radar_features,
                                             sampled_idx_list = radar_sampled_idx_list)
 
+
+        #@ LIST[ (B,32,4096,16),(B,64,4096,32)]
         lidar_gathered_features = self.single_gather_features(
                                             self.LIDAR_MODULES,
                                             xyz=lidar_xyz,
@@ -1294,7 +1348,53 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
-        lidar_feat_post_attn,radar_feat_post_attn = self.attention_and_pool(radar_gathered_features,lidar_gathered_features)
+        ##!!!!! ONLY WORKS FOR BATCHSIZE 1 
+        # 
+        print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
+        lidar_idx = lidar_for_radar.squeeze(2).squeeze(0)
+        radar_idx = radar_for_lidar.squeeze(2).squeeze(0)
+
+        lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
+        radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
+
+
+
+        lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
+        radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
+        
+        
+        radar_final_features = [
+            torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),1) for i in range(len(lidar_features_for_radar_post_attn))
+        ]
+        
+        lidar_final_features = [
+            torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),1) for i in range(len(radar_features_for_lidar_post_attn))
+        ]
+        
+
+        radar_final_features = self.single_pool_and_aggregate(
+            radar_final_features,
+            self.RADAR_MODULES['POOL_METHOD'],
+            self.RADAR_MODULES['AGGREGATION_LAYER'])
+
+        lidar_final_features = self.single_pool_and_aggregate(
+            lidar_final_features,
+            self.RADAR_MODULES['POOL_METHOD'],
+            self.RADAR_MODULES['AGGREGATION_LAYER'])
+
+        
+
+        if self.RADAR_MODULES['CONFIDENCE_LAYERS'] is not None:
+            lidar_cls_features = self.LIDAR_MODULES['CONFIDENCE_LAYERS'](lidar_final_features).transpose(1,2)
+            radar_cls_features = self.RADAR_MODULES['CONFIDENCE_LAYERS'](radar_final_features).transpose(1,2)
+            
+        else:
+            lidar_cls_features = None
+            radar_cls_features = None
+        # lidar_feat_post_attn,radar_feat_post_attn = self.attention_and_pool(radar_gathered_features,lidar_gathered_features)
+
+
+
 
 
 
@@ -1303,8 +1403,8 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
         ret_dict = {
-            'lidar': (lidar_new_xyz,lidar_features,lidar_cls_pred),
-            'radar': (radar_new_xyz,radar_features,radar_cls_pred),
+            'lidar': (lidar_new_xyz,lidar_final_features,lidar_cls_features),
+            'radar': (radar_new_xyz,radar_final_features,radar_cls_features),
         }
         
 

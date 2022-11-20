@@ -375,6 +375,8 @@ class BERTSSD_Backbone(nn.Module):
                 lidar_center_origin_batch_idx = lidar_batch_idx.view(batch_size, -1)[:, :lidar_centers_origin.shape[1]]
                 radar_center_origin_batch_idx = radar_batch_idx.view(batch_size, -1)[:, :radar_centers_origin.shape[1]]
 
+                lidar_encoder_coords.append(torch.cat([lidar_center_origin_batch_idx[..., None].float(),lidar_centers_origin.view(batch_size, -1, 3)],dim =-1))
+                radar_encoder_coords.append(torch.cat([radar_center_origin_batch_idx[..., None].float(),radar_centers_origin.view(batch_size, -1, 3)],dim =-1))
                 # centers = li_xyz
                 # centers_origin = xyz_select
                 # center_origin_batch_idx = batch_idx.view(batch_size, -1)[:, :centers_origin.shape[1]]
@@ -424,8 +426,6 @@ class BERTSSD_Backbone(nn.Module):
         radar_center_features = radar_encoder_features[-1].permute(0, 2, 1).contiguous().view(-1, radar_encoder_features[-1].shape[1]) # shape?
         batch_dict['radar_centers_features'] = radar_center_features            
 
-
-
         batch_dict['lidar_encoder_xyz'] = lidar_encoder_xyz
         batch_dict['lidar_encoder_coords'] = lidar_encoder_coords
         batch_dict['lidar_sa_ins_preds'] = lidar_sa_ins_preds
@@ -435,5 +435,18 @@ class BERTSSD_Backbone(nn.Module):
         batch_dict['radar_encoder_coords'] = radar_encoder_coords
         batch_dict['radar_sa_ins_preds'] = radar_sa_ins_preds
         batch_dict['radar_encoder_features'] = radar_encoder_features 
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         return batch_dict
