@@ -112,7 +112,7 @@ class BERTSSD_Backbone(nn.Module):
 #                       |
 #                 (IASSD_HEAD)
 
-    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg):
+    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg,disable_cross_attn):
 
         
         radar_npoint_list = radar_sa_cfg.NPOINT_LIST
@@ -241,7 +241,8 @@ class BERTSSD_Backbone(nn.Module):
                 self.MMSA_modules.append(
                     pointnet2_modules.MMSAModuleMSG_WithSampling(
                         radar_settings=radar_settings,
-                        lidar_settings=lidar_settings
+                        lidar_settings=lidar_settings,
+                        disable_cross_attn = disable_cross_attn
                     )
                 )
 
@@ -289,9 +290,9 @@ class BERTSSD_Backbone(nn.Module):
         self.num_points_each_layer = []
 
         lidar_sa_cfg,radar_sa_cfg = self.model_cfg.LIDAR_SA_CONFIG,self.model_cfg.RADAR_SA_CONFIG
+        self.disable_cross_attn = self.model_cfg.DISABLE_CROSS_ATTENTION
         
-        
-        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg)
+        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg,self.disable_cross_attn)
         # lidar_SA_modules,radar_SA_modules = self.build_both_sa_layers(lidar_sa_cfg,radar_sa_cfg)
     def break_up_pc(self, pc):
         batch_idx = pc[:, 0]
@@ -338,13 +339,13 @@ class BERTSSD_Backbone(nn.Module):
 
             lidar_xyz_input = lidar_encoder_xyz[self.lidar_layer_inputs[i]]
             radar_xyz_input = radar_encoder_xyz[self.radar_layer_inputs[i]]
+                
+            lidar_feature_input = lidar_encoder_features[self.lidar_layer_inputs[i]]
+            radar_feature_input = radar_encoder_features[self.radar_layer_inputs[i]]
 
             if self.lidar_layer_types[i] == 'SA_Layer':
                 lidar_ctr_xyz = lidar_encoder_xyz[self.lidar_ctr_idx_list[i]] if self.lidar_ctr_idx_list[i] != -1 else None
                 radar_ctr_xyz = radar_encoder_xyz[self.lidar_ctr_idx_list[i]] if self.lidar_ctr_idx_list[i] != -1 else None
-                
-                lidar_feature_input = lidar_encoder_features[self.lidar_layer_inputs[i]]
-                radar_feature_input = radar_encoder_features[self.radar_layer_inputs[i]]
 
 
                 ret = self.MMSA_modules[i](
@@ -363,7 +364,7 @@ class BERTSSD_Backbone(nn.Module):
                 radar_li_xyz, radar_li_features, radar_li_cls_pred = ret['radar']
 
 
-            elif self.layer_types[i] == 'Vote_Layer': #i=4
+            elif self.lidar_layer_types[i] == 'Vote_Layer': #i=4
             
                 ret = self.MMSA_modules[i](lidar_xyz_input, radar_xyz_input,lidar_feature_input,radar_feature_input)
                 lidar_li_xyz, lidar_li_features, lidar_xyz_select, lidar_ctr_offsets = ret['lidar']
@@ -437,10 +438,21 @@ class BERTSSD_Backbone(nn.Module):
         batch_dict['radar_encoder_features'] = radar_encoder_features 
 
 
+        if self.disable_cross_attn:
 
+            batch_dict['ctr_offsets'] = batch_dict['lidar_ctr_offsets'] 
+            batch_dict['centers'] = batch_dict['lidar_centers']
+            batch_dict['centers_origin'] = batch_dict['lidar_centers_offsets']
+            batch_dict['ctr_batch_idx'] = batch_dict['lidar_ctr_batch_idx']
+            
+            batch_dict['centers_features'] = batch_dict['lidar_centers_features']
 
-
-
+            batch_dict['encoder_xyz'] = batch_dict['lidar_encoder_xyz']
+            batch_dict['encoder_coords'] = batch_dict['lidar_encoder_coords']
+            batch_dict['sa_ins_preds'] = batch_dict['lidar_sa_ins_preds']
+            batch_dict['encoder_features'] = batch_dict['lidar_encoder_features'] # not used later?
+            
+            
 
 
 

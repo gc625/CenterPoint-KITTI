@@ -92,9 +92,7 @@ class BERTSSD(Detector3DTemplate):
 
 # ===========================================================================
     def load_ckpt_to_attach(self, filename, logger, to_cpu=False):
-        """
-        not used..?
-        """
+
         if not os.path.isfile(filename):
             raise FileNotFoundError
 
@@ -106,13 +104,34 @@ class BERTSSD(Detector3DTemplate):
         if 'version' in checkpoint:
             logger.info('==> Checkpoint trained from version: %s' % checkpoint['version'])
 
+
+        replace_values = {
+            'mlps': 'lidar_mlps',
+            'aggregation_layer':'lidar_aggregation_layer',
+            'confidence_layer':'lidar_confidence_layer',
+            '4.mlp_modules':'4.lidar_vote_layer.mlp_modules',
+            '4.ctr_reg': '4.lidar_vote_layer.ctr_reg'
+        }
+
+        num_updated = 0
         update_model_state = {}
         for key, val in model_state_disk.items():
-            attach_key = 'attach_' + key
-            if attach_key in self.state_dict() and self.state_dict()[attach_key].shape == model_state_disk[key].shape:
-                update_model_state[attach_key] = val
+            lidar_key = key.replace('SA','MMSA')
+            for name,new_name in replace_values.items():
+                if name in lidar_key:
+                    lidar_key = lidar_key.replace(name,new_name)
+            # if attach_key in self.state_dict() and self.state_dict()[attach_key].shape == model_state_disk[key].shape:
+            is_in = lidar_key in self.state_dict()
+            shape_match = self.state_dict()[lidar_key].shape == model_state_disk[key].shape
+            if is_in and shape_match:
+                update_model_state[lidar_key] = val
+                num_updated += 1
                 logger.info('Update weight %s: %s' % (key, str(val.shape)))
+            else:
 
+                print(f'NOT UPDATED: isin={is_in}, shape_match{shape_match}, {lidar_key} AND {key}')
+
+        assert len(model_state_disk) == num_updated, "missed a weight"
         state_dict = self.state_dict()
         state_dict.update(update_model_state)
         self.load_state_dict(state_dict)

@@ -876,8 +876,10 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(MLPS) > 0):
             shared_mlp = []
             for k in range(len(aggregation_mlp)):
+
+                out_channels = out_channels if self.disable_cross_attn else out_channels*2
                 shared_mlp.extend([
-                    nn.Conv1d(out_channels*2, #! MULT 2 HERE FOR EXTRA ATTENTION FEATURE
+                    nn.Conv1d(out_channels, #! MULT 2 HERE FOR EXTRA ATTENTION FEATURE
                               aggregation_mlp[k], kernel_size=1, bias=False),
                     nn.BatchNorm1d(aggregation_mlp[k]),
                     nn.ReLU()
@@ -1207,6 +1209,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
 
+
     def single_attention(self,q_features,kv_features,attention_modules):
 
 
@@ -1229,20 +1232,50 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         return ret
 
+
+
+    def assign_layers(self):
+
+        self.radar_sa_modules = self.RADAR_MODULES['SA_MODULES']         
+        self.radar_grouping_modules = self.RADAR_MODULES['GROUPING_MODULES']
+        self.radar_mlps = self.RADAR_MODULES['MLPS']
+        self.radar_aggregation_layer = self.RADAR_MODULES['AGGREGATION_LAYER']
+        self.radar_confidence_layers = self.RADAR_MODULES['CONFIDENCE_LAYERS']
+
+        self.lidar_sa_modules = self.LIDAR_MODULES['SA_MODULES']
+        self.lidar_grouping_modules = self.LIDAR_MODULES['GROUPING_MODULES']
+        self.lidar_mlps = self.LIDAR_MODULES['MLPS']
+        self.lidar_aggregation_layer = self.LIDAR_MODULES['AGGREGATION_LAYER']
+        self.lidar_confidence_layers = self.LIDAR_MODULES['CONFIDENCE_LAYERS']
+
+
+
+
+
     def __init__(self, *,
                 radar_settings,
-                lidar_settings):
+                lidar_settings,
+                disable_cross_attn):
         super().__init__()
 
         assert len(radar_settings) == len(lidar_settings), "setting lengths dont match"
 
+        self.disable_cross_attn = disable_cross_attn
 
         self.RADAR_MODULES = self.build_sa_modules(*radar_settings) 
         self.LIDAR_MODULES = self.build_sa_modules(*lidar_settings)
-        
+        self.assign_layers()
+
         # Builds attention modules 
         self.build_attention_modules()
 
+
+        # sa_modules
+        # grouping_modules
+        # mlps
+        # aggregation_layer
+        # confidence_layer
+        # 
 
     def match_clusters(self,lidar_new_xyz,radar_new_xyz):
 
@@ -1298,7 +1331,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         '''
 
         
-
+        
         #@ [B,512,3]         [B,512]
         radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
                                                         self.RADAR_MODULES,
@@ -1322,15 +1355,17 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         # np.save('radar_xyz',radar_xyz.cpu().numpy())
         # np.save('radar_new_xyz',radar_new_xyz.cpu().numpy())
 
-        #@ [B,4096,1]     [B,512,1]
-        radar_for_lidar,lidar_for_radar = self.match_clusters(lidar_new_xyz,radar_new_xyz)        
+        if len(self.radar_grouping_modules) > 0:
+
+            #@ [B,4096,1]     [B,512,1]
+            radar_for_lidar,lidar_for_radar = self.match_clusters(lidar_new_xyz,radar_new_xyz)        
 
 
-        # OUTPUT IS list of num_radii tensors
+            # OUTPUT IS list of num_radii tensors
 
 
-        #@ LIST[ (B,32,512,16),(B,64,512,32)]
-        radar_gathered_features = self.single_gather_features(
+            #@ LIST[ (B,32,512,16),(B,64,512,32)]
+            radar_gathered_features = self.single_gather_features(
                                             self.RADAR_MODULES,
                                             xyz=radar_xyz,
                                             new_xyz=radar_new_xyz,
@@ -1338,63 +1373,66 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                                             sampled_idx_list = radar_sampled_idx_list)
 
 
-        #@ LIST[ (B,32,4096,16),(B,64,4096,32)]
-        lidar_gathered_features = self.single_gather_features(
-                                            self.LIDAR_MODULES,
-                                            xyz=lidar_xyz,
-                                            new_xyz=lidar_new_xyz,
-                                            features=lidar_features,
-                                            sampled_idx_list = lidar_sampled_idx_list)
+            #@ LIST[ (B,32,4096,16),(B,64,4096,32)]
+            lidar_gathered_features = self.single_gather_features(
+                                                self.LIDAR_MODULES,
+                                                xyz=lidar_xyz,
+                                                new_xyz=lidar_new_xyz,
+                                                features=lidar_features,
+                                                sampled_idx_list = lidar_sampled_idx_list)
 
-        assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
+            assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
-        ##!!!!! ONLY WORKS FOR BATCHSIZE 1 
-        # 
-        print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
-        lidar_idx = lidar_for_radar.squeeze(2).squeeze(0)
-        radar_idx = radar_for_lidar.squeeze(2).squeeze(0)
+            ##!!!!! ONLY WORKS FOR BATCHSIZE 1 
+            # 
+            if not self.disable_cross_attn:
+                print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
+                lidar_idx = lidar_for_radar.squeeze(2).squeeze(0)
+                radar_idx = radar_for_lidar.squeeze(2).squeeze(0)
 
-        lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
-        radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
+                lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
+                radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
 
 
 
-        lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
-        radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
-        
-        
-        radar_final_features = [
-            torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),1) for i in range(len(lidar_features_for_radar_post_attn))
-        ]
-        
-        lidar_final_features = [
-            torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),1) for i in range(len(radar_features_for_lidar_post_attn))
-        ]
-        
+                lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
+                radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
+                
+                
+                radar_final_features = [
+                    torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),1) for i in range(len(lidar_features_for_radar_post_attn))
+                ]
+                
+                lidar_final_features = [
+                    torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),1) for i in range(len(radar_features_for_lidar_post_attn))
+                ]
+            else:
+                lidar_final_features = lidar_gathered_features
+                radar_final_features = radar_gathered_features
 
-        radar_final_features = self.single_pool_and_aggregate(
-            radar_final_features,
-            self.RADAR_MODULES['POOL_METHOD'],
-            self.RADAR_MODULES['AGGREGATION_LAYER'])
+            radar_final_features = self.single_pool_and_aggregate(
+                radar_final_features,
+                self.RADAR_MODULES['POOL_METHOD'],
+                self.radar_aggregation_layer)
 
-        lidar_final_features = self.single_pool_and_aggregate(
-            lidar_final_features,
-            self.RADAR_MODULES['POOL_METHOD'],
-            self.RADAR_MODULES['AGGREGATION_LAYER'])
+            lidar_final_features = self.single_pool_and_aggregate(
+                lidar_final_features,
+                self.LIDAR_MODULES['POOL_METHOD'],
+                self.lidar_aggregation_layer)
 
-        
+        else:
+            lidar_final_features = pointnet2_utils.gather_operation(lidar_features,lidar_sampled_idx_list)                
+            radar_final_features = pointnet2_utils.gather_operation(radar_features,radar_sampled_idx_list)
+
 
         if self.RADAR_MODULES['CONFIDENCE_LAYERS'] is not None:
-            lidar_cls_features = self.LIDAR_MODULES['CONFIDENCE_LAYERS'](lidar_final_features).transpose(1,2)
-            radar_cls_features = self.RADAR_MODULES['CONFIDENCE_LAYERS'](radar_final_features).transpose(1,2)
+            lidar_cls_features = self.lidar_confidence_layer(lidar_final_features).transpose(1,2)
+            radar_cls_features = self.radar_confidence_layers(radar_final_features).transpose(1,2)
             
         else:
             lidar_cls_features = None
             radar_cls_features = None
         # lidar_feat_post_attn,radar_feat_post_attn = self.attention_and_pool(radar_gathered_features,lidar_gathered_features)
-
-
-
 
 
 

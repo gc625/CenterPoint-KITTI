@@ -32,6 +32,9 @@ MODEL:
     BACKBONE_3D:
         NAME: BERTSSD_Backbone
         # * LiDAR set abstraction config
+
+        LIDAR_CKPT:  /workspaces/CenterPoint-KITTI/output/IA-SSD-vod-lidar/debug_new/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth
+        DISABLE_CROSS_ATTENTION: True
         LIDAR_SA_CONFIG:
             POINT_INPUT_FEATURES: 4
             # Sampling setting:
