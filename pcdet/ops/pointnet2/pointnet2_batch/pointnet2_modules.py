@@ -873,11 +873,22 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         POOL_METHOD = pool_method
 
+
+
+        COMBINE_MLP = None
+
         if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(MLPS) > 0):
             shared_mlp = []
+        
+            COMBINE_MLP = nn.Sequential(
+                nn.Conv1d(out_channels*2,out_channels,kernel_size=1,bias=False),
+                nn.BatchNorm1d(out_channels),
+                nn.ReLU()
+            )
+        
             for k in range(len(aggregation_mlp)):
 
-                out_channels = out_channels if self.disable_cross_attn else out_channels*2
+                # out_channels = out_channels if self.disable_cross_attn else out_channels*2
                 shared_mlp.extend([
                     nn.Conv1d(out_channels, #! MULT 2 HERE FOR EXTRA ATTENTION FEATURE
                               aggregation_mlp[k], kernel_size=1, bias=False),
@@ -921,6 +932,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             "SAMPLE_IDX":SAMPLE_IDX,
             "POOL_METHOD":POOL_METHOD,
             'NSAMPLES': NSAMPLES,
+            'COMBINE_MLP':COMBINE_MLP,
             'RADII': radii
         }
 
@@ -1168,9 +1180,10 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         MLPS = self.RADAR_MODULES['MLPS']
         for i in range(len(MLPS)):
             # dim = MLPS[i]
+            nhead = self.nheads[i]
             dim = MLPS[i][6].out_channels
-            self.radarCrosslidar.append(nn.MultiheadAttention(dim,8))
-            self.lidarCrossradar.append(nn.MultiheadAttention(dim,8))            
+            self.radarCrosslidar.append(nn.MultiheadAttention(dim,nhead))
+            self.lidarCrossradar.append(nn.MultiheadAttention(dim,nhead))            
                 
     def attention_and_pool(self,radar_features:List[torch.Tensor],lidar_features:List[torch.Tensor]):
 
@@ -1241,13 +1254,14 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.radar_mlps = self.RADAR_MODULES['MLPS']
         self.radar_aggregation_layer = self.RADAR_MODULES['AGGREGATION_LAYER']
         self.radar_confidence_layers = self.RADAR_MODULES['CONFIDENCE_LAYERS']
+        self.radar_combine_mlp = self.RADAR_MODULES['COMBINE_MLP']
 
         self.lidar_sa_modules = self.LIDAR_MODULES['SA_MODULES']
         self.lidar_grouping_modules = self.LIDAR_MODULES['GROUPING_MODULES']
         self.lidar_mlps = self.LIDAR_MODULES['MLPS']
         self.lidar_aggregation_layer = self.LIDAR_MODULES['AGGREGATION_LAYER']
         self.lidar_confidence_layers = self.LIDAR_MODULES['CONFIDENCE_LAYERS']
-
+        self.lidar_combine_mlp = self.LIDAR_MODULES['COMBINE_MLP']
 
 
 
@@ -1255,18 +1269,24 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
     def __init__(self, *,
                 radar_settings,
                 lidar_settings,
-                disable_cross_attn):
+                disable_cross_attn,
+                concat_attn_ft_dim,
+                n_heads):
         super().__init__()
 
         assert len(radar_settings) == len(lidar_settings), "setting lengths dont match"
 
         self.disable_cross_attn = disable_cross_attn
 
+        self.concat_attn_ft_dim = int(concat_attn_ft_dim) 
+        if self.concat_attn_ft_dim != 1 and self.concat_attn_ft_dim != -1:
+            raise ValueError(f'attn feat concat dim needs to be 1 (feature dim) or -1 (nsmaple dim), got {type(concat_attn_ft_dim)}')
         self.RADAR_MODULES = self.build_sa_modules(*radar_settings) 
         self.LIDAR_MODULES = self.build_sa_modules(*lidar_settings)
         self.assign_layers()
-
         # Builds attention modules 
+        
+        self.nheads = n_heads
         self.build_attention_modules()
 
 
@@ -1289,7 +1309,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
     
         return radar_for_lidar,lidar_for_radar
 
-    def single_pool_and_aggregate(self,feature_list,pool_method,aggregation_layer):
+    def single_pool_and_aggregate(self,feature_list,pool_method,combine_layer,aggregation_layer):
 
         new_feature_list = []
         for i in range(len(feature_list)):
@@ -1306,9 +1326,33 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
         final_features = torch.cat(new_feature_list,dim=1) 
+
+        if combine_layer is None:
+            raise RuntimeError("COMBINE LAYER IS NONE DURING cross attn")
+
+
+        if self.concat_attn_ft_dim == 1:
+            final_features = combine_layer(final_features)
+
         final_features = aggregation_layer(final_features)
         
         return final_features
+
+    def gather_cross_features(self,indices,feature_list):
+
+        ret_list = []
+
+        B, _ = indices.shape
+        for feature in feature_list:
+            sampled_points = []
+            for b in range(B):
+                sampled_points += [feature[b,:,indices[b].long(),:]]
+            ret_list += [torch.stack(sampled_points)]
+        return ret_list
+
+
+
+
 
     def forward(self,
                 lidar_xyz: torch.Tensor,
@@ -1383,15 +1427,16 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
             assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
-            ##!!!!! ONLY WORKS FOR BATCHSIZE 1 
             # 
             if not self.disable_cross_attn:
-                print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
-                lidar_idx = lidar_for_radar.squeeze(2).squeeze(0)
-                radar_idx = radar_for_lidar.squeeze(2).squeeze(0)
+                # print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
+                lidar_idx = lidar_for_radar.squeeze(2)
+                radar_idx = radar_for_lidar.squeeze(2)
 
-                lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
-                radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
+                lidar_features_for_radar = self.gather_cross_features(lidar_idx,lidar_gathered_features)
+                radar_features_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_features)
+                # lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
+                # radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
 
 
 
@@ -1399,12 +1444,13 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
                 
                 
+
                 radar_final_features = [
-                    torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),1) for i in range(len(lidar_features_for_radar_post_attn))
+                    torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(lidar_features_for_radar_post_attn))
                 ]
                 
                 lidar_final_features = [
-                    torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),1) for i in range(len(radar_features_for_lidar_post_attn))
+                    torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(radar_features_for_lidar_post_attn))
                 ]
             else:
                 lidar_final_features = lidar_gathered_features
@@ -1413,11 +1459,13 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             radar_final_features = self.single_pool_and_aggregate(
                 radar_final_features,
                 self.RADAR_MODULES['POOL_METHOD'],
+                self.radar_combine_mlp,
                 self.radar_aggregation_layer)
 
             lidar_final_features = self.single_pool_and_aggregate(
                 lidar_final_features,
                 self.LIDAR_MODULES['POOL_METHOD'],
+                self.lidar_combine_mlp,
                 self.lidar_aggregation_layer)
 
         else:
@@ -1426,7 +1474,7 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
         if self.RADAR_MODULES['CONFIDENCE_LAYERS'] is not None:
-            lidar_cls_features = self.lidar_confidence_layer(lidar_final_features).transpose(1,2)
+            lidar_cls_features = self.lidar_confidence_layers(lidar_final_features).transpose(1,2)
             radar_cls_features = self.radar_confidence_layers(radar_final_features).transpose(1,2)
             
         else:

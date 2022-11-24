@@ -196,11 +196,17 @@ class Detector3DTemplate(nn.Module):
         if self.model_cfg.get('POINT_HEAD', None) is None:
             return None, model_info_dict
         
-        # if self.model_cfg.POINT_HEAD.get('USE_POINT_FEATURES_BEFORE_FUSION', False):
-        #     num_point_features = model_info_dict['num_point_features_before_fusion']
-        # else:
-        #     num_point_features = model_info_dict['num_point_features']
-        num_point_features = self.model_cfg.BACKBONE_3D.LIDAR_SA_CONFIG.AGGREGATION_MLPS[-1][-1]
+
+        if self.model_cfg['NAME'] == 'BERTSSD':
+            num_point_features = self.model_cfg.BACKBONE_3D.LIDAR_SA_CONFIG.AGGREGATION_MLPS[-1][-1]
+        
+        else:
+            if self.model_cfg.POINT_HEAD.get('USE_POINT_FEATURES_BEFORE_FUSION', False):
+                num_point_features = model_info_dict['num_point_features_before_fusion']
+            else:
+                num_point_features = model_info_dict['num_point_features']
+        
+        
         head_cfg = self.model_cfg if custom_cfg is None else custom_cfg
         head_cfg.POINT_HEAD['DEBUG'] = self.model_cfg.get('DEBUG', False)
         point_head_module = dense_heads.__all__[self.model_cfg.POINT_HEAD.NAME](

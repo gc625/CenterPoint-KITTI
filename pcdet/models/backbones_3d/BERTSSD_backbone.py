@@ -112,7 +112,7 @@ class BERTSSD_Backbone(nn.Module):
 #                       |
 #                 (IASSD_HEAD)
 
-    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg,disable_cross_attn):
+    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg,disable_cross_attn,concat_attn_ft_dim,nheads):
 
         
         radar_npoint_list = radar_sa_cfg.NPOINT_LIST
@@ -237,12 +237,15 @@ class BERTSSD_Backbone(nn.Module):
                     lidar_confidence_mlp,
                     self.num_class,
                 ]
-
+                
+                
                 self.MMSA_modules.append(
                     pointnet2_modules.MMSAModuleMSG_WithSampling(
                         radar_settings=radar_settings,
                         lidar_settings=lidar_settings,
-                        disable_cross_attn = disable_cross_attn
+                        disable_cross_attn = disable_cross_attn,
+                        concat_attn_ft_dim = concat_attn_ft_dim,
+                        n_heads= nheads[k]
                     )
                 )
 
@@ -290,9 +293,11 @@ class BERTSSD_Backbone(nn.Module):
         self.num_points_each_layer = []
 
         lidar_sa_cfg,radar_sa_cfg = self.model_cfg.LIDAR_SA_CONFIG,self.model_cfg.RADAR_SA_CONFIG
-        self.disable_cross_attn = self.model_cfg.DISABLE_CROSS_ATTENTION
         
-        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg,self.disable_cross_attn)
+        self.disable_cross_attn = self.model_cfg.DISABLE_CROSS_ATTENTION
+        self.concat_attn_ft_dim = self.model_cfg.CONCAT_ATTN_FT_DIM
+        self.nheads = self.model_cfg.NHEADS
+        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg,self.disable_cross_attn,self.concat_attn_ft_dim,self.nheads)
         # lidar_SA_modules,radar_SA_modules = self.build_both_sa_layers(lidar_sa_cfg,radar_sa_cfg)
     def break_up_pc(self, pc):
         batch_idx = pc[:, 0]
@@ -438,20 +443,20 @@ class BERTSSD_Backbone(nn.Module):
         batch_dict['radar_encoder_features'] = radar_encoder_features 
 
 
-        if self.disable_cross_attn:
+        # if self.disable_cross_attn:
 
-            batch_dict['ctr_offsets'] = batch_dict['lidar_ctr_offsets'] 
-            batch_dict['centers'] = batch_dict['lidar_centers']
-            batch_dict['centers_origin'] = batch_dict['lidar_centers_offsets']
-            batch_dict['ctr_batch_idx'] = batch_dict['lidar_ctr_batch_idx']
-            
-            batch_dict['centers_features'] = batch_dict['lidar_centers_features']
+        batch_dict['ctr_offsets'] = batch_dict['lidar_ctr_offsets'] 
+        batch_dict['centers'] = batch_dict['lidar_centers']
+        batch_dict['centers_origin'] = batch_dict['lidar_centers_origin']
+        batch_dict['ctr_batch_idx'] = batch_dict['lidar_ctr_batch_idx']
+        
+        batch_dict['centers_features'] = lidar_center_features
 
-            batch_dict['encoder_xyz'] = batch_dict['lidar_encoder_xyz']
-            batch_dict['encoder_coords'] = batch_dict['lidar_encoder_coords']
-            batch_dict['sa_ins_preds'] = batch_dict['lidar_sa_ins_preds']
-            batch_dict['encoder_features'] = batch_dict['lidar_encoder_features'] # not used later?
-            
+        batch_dict['encoder_xyz'] = batch_dict['lidar_encoder_xyz']
+        batch_dict['encoder_coords'] = batch_dict['lidar_encoder_coords']
+        batch_dict['sa_ins_preds'] = batch_dict['lidar_sa_ins_preds']
+        batch_dict['encoder_features'] = batch_dict['lidar_encoder_features'] # not used later?
+        
             
 
 

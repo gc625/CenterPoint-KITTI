@@ -157,7 +157,23 @@ def main():
 
     if cfg.get('USE_ATTACH', False):
         logger.info('===> Loading ckpt for attached model')
+        model.load_ckpt_to_attach(cfg.MODEL.ATTACH_NETWORK.CKPT_FILE, logger)
+        
+    if cfg.get('LOAD_BACKBONES',False):
+        logger.info('===> Loading ckpt for lidar and radar bb')        
         model.load_ckpt_to_attach(cfg.MODEL.BACKBONE_3D.LIDAR_CKPT, logger)
+        model.load_radar_ckpt_to_attach(cfg.MODEL.BACKBONE_3D.RADAR_CKPT,logger)
+
+
+
+
+    if cfg.MODEL.BACKBONE_3D.get('FREEZE_LIDAR',False):
+        logger.info('===> FREEZING PARAMS IN LIDAR')
+        model.freeze_backbone('lidar',logger)
+
+    if cfg.MODEL.BACKBONE_3D.get('FREEZE_RADAR',False):
+        logger.info('===> FREEZING PARAMS IN RADAR') 
+        model.freeze_backbone('radar',logger)
 
     if cfg.get('BACKBONE_CKPT', False):
         logger.info('===> Loading ckpt for main backbone')
@@ -182,8 +198,8 @@ def main():
             last_epoch = start_epoch + 1
 
     model.train()  # before wrap to DistributedDataParallel to support fixed some parameters
-    if cfg.get('USE_ATTACH', False):
-        model.freeze_attach(logger)
+    # if cfg.get('USE_ATTACH', False):
+        # model.freeze_attach(logger)
         
     freeze_mode = model.model_cfg.get('FREEZE_MODE', None)
     # all attribute related operation should be perform before parallel wrapper

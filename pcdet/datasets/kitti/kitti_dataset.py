@@ -445,21 +445,22 @@ class KittiDataset(DatasetTemplate):
         calib = self.get_calib(sample_idx)
 
         
-        if self.use_attach & self.training:
-            if self.is_radar:
-                attach_calib = self.get_attach_calib(sample_idx)
-                attach = self.get_attach_lidar(sample_idx)
+        # if self.use_attach & self.training:
+            # if self.is_radar:
+                # attach_calib = self.get_attach_calib(sample_idx)
+                # attach = self.get_attach_lidar(sample_idx)
             # if self.dataset_cfg.FOV_POINTS_ONLY:
-            else:
-                attach_calib = self.get_attach_calib(sample_idx)
-                attach = self.get_attach_radar(sample_idx)
+            # else:
+        attach_calib = self.get_attach_calib(sample_idx)
+        # attach = self.get_attach_lidar(sample_idx)
+        attach = self.get_attach_radar(sample_idx)
 
-        elif self.debug:
-            attach_calib = self.get_attach_calib(sample_idx)
-            attach = self.get_attach_lidar(sample_idx)
-        else:
-            # print('not loading attach lidar')
-            attach = None
+        # elif self.debug:
+        #     attach_calib = self.get_attach_calib(sample_idx)
+        #     attach = self.get_attach_lidar(sample_idx)
+        # else:
+        #     # print('not loading attach lidar')
+        #     attach = None
         img_shape = info['image']['image_shape']
         if self.dataset_cfg.FOV_POINTS_ONLY:
             pts_rect = calib.lidar_to_rect(points[:, 0:3])
