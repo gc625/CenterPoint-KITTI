@@ -33,17 +33,7 @@ class BERTSSD(Detector3DTemplate):
         self.lidar_param_names = []
         self.radar_param_names = []
         
-        
-
-
-
-
-
-
-
-
-
-
+        self.combine_radar_preds = model_cfg.COMBINE_RADAR_PREDS
 
         # # Attach Network
         # self.attach_module_topology = ['backbone_3d']
@@ -53,7 +43,7 @@ class BERTSSD(Detector3DTemplate):
         # # Shared Head
         self.shared_module_topology = ['point_head']
         shared_head = self.build_shared_head()
-        self.shared_head = None if len(shared_head) == 0 else shared_head[0] 
+        self.radar_head = None if len(shared_head) == 0 else shared_head[0] 
         
         # # ? Not sure if used
         # self.cross_over_cfg = self.model_cfg.CROSS_OVER 
@@ -133,7 +123,7 @@ class BERTSSD(Detector3DTemplate):
                 update_model_state[lidar_key] = val
 
                 num_updated += 1
-                logger.info('Update weight %s: %s' % (key, str(val.shape)))
+                logger.info('Update weight %s -> %s: %s' % (key,lidar_key, str(val.shape)))
             else:
 
                 print(f'NOT UPDATED: isin={is_in}, shape_match{shape_match}, {lidar_key} AND {key}\n shapes')
@@ -182,6 +172,7 @@ class BERTSSD(Detector3DTemplate):
             is_in = radar_key in self.state_dict()
             shape_match = self.state_dict()[radar_key].shape == model_state_disk[key].shape
             if 'point_head' in key:
+                # radar_key = radar_key.replace('point_head','radar_point_head')
                 print(f'NOT UPDATED: RADAR POINT_HEAD WEIGHTS: {radar_key}, for  {key}')
 
             elif is_in and shape_match:
@@ -189,7 +180,7 @@ class BERTSSD(Detector3DTemplate):
                 self.radar_param_names += [radar_key]
                 update_model_state[radar_key] = val
                 num_updated += 1
-                logger.info('Update weight %s: %s' % (key, str(val.shape)))
+                logger.info('Update weight %s -> %s: %s' % (key, radar_key, str(val.shape)))
             
 
             else:
@@ -282,7 +273,7 @@ class BERTSSD(Detector3DTemplate):
                 model_info_dict=model_info_dict,
                 custom_cfg=self.model_cfg.RADAR_HEAD
             )
-            full_module_name = 'radar' + module_name
+            full_module_name = 'radar_'+module_name
             self.add_module(full_module_name, module)
         return model_info_dict['module_list']
 
@@ -379,6 +370,28 @@ class BERTSSD(Detector3DTemplate):
             return ret_dict, tb_dict, disp_dict
         else:
             
+            if self.combine_radar_preds:
+                radar_head_dict = {
+                    'points':batch_dict['attach'], 
+                    'batch_size':batch_dict['batch_size'], 
+                    'frame_id':batch_dict['frame_id'],
+                    'ctr_offsets':batch_dict['radar_ctr_offsets'], 
+                    'centers':batch_dict['radar_centers'], 
+                    'centers_origin':batch_dict['radar_centers_origin'], 
+                    'ctr_batch_idx':batch_dict['radar_ctr_batch_idx'], 
+                    'encoder_xyz':batch_dict['radar_encoder_xyz'], 
+                    'encoder_coords':batch_dict['radar_encoder_coords'], 
+                    'sa_ins_preds':batch_dict['radar_sa_ins_preds'], 
+                    'encoder_features':batch_dict['radar_encoder_features'], 
+                    'gt_boxes':batch_dict['gt_boxes'], 
+                    'centers_features':batch_dict['radar_centers_features']
+                }
+                radar_head_dict = self.radar_head(radar_head_dict)
+                batch_dict['batch_cls_preds'] = torch.concat((batch_dict['batch_cls_preds'],radar_head_dict['batch_cls_preds']),dim=0)
+                batch_dict['batch_box_preds'] = torch.concat((batch_dict['batch_box_preds'],radar_head_dict['batch_box_preds']),dim=0)
+                # batch_dict['box_iou3d_preds'] = torch.concat((batch_dict['box_iou3d_preds'],radar_head_dict['box_iou3d_preds']),dim=0)
+                batch_dict['batch_index'] = torch.concat((batch_dict['batch_index'],radar_head_dict['batch_index']),dim=0)
+
             pred_dicts, recall_dicts = self.post_processing(batch_dict)
             if self.debug:
                 loss, tb_dict, disp_dict = self.get_training_loss()
@@ -414,8 +427,8 @@ class BERTSSD(Detector3DTemplate):
             'centers_features':batch_dict['radar_centers_features']
         }
 
-        radar_head_dict = self.shared_head(radar_head_dict)
-        radar_head_loss, radar_tb_dict = self.shared_head.get_loss(radar_head_dict)
+        radar_head_dict = self.radar_head(radar_head_dict)
+        radar_head_loss, radar_tb_dict = self.radar_head.get_loss(radar_head_dict)
         disp_dict = {
             'share_det_loss': radar_head_loss.item()
         }
@@ -424,34 +437,34 @@ class BERTSSD(Detector3DTemplate):
 
 
 
-    def get_transfer_loss(self, batch_dict):
+    # def get_transfer_loss(self, batch_dict):
 
-        attach_dict = self.get_transfer_feature(batch_dict)
-        transfer_dict = {
-            'att': attach_dict,
-            'batch': batch_dict
-        }
-        radar_shared_feat = batch_dict['radar_shared']
-        share_head_dict = {}
-        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
-        for key in attach_dict.keys():
-            if key in batch_dict:
-                share_head_dict[key] = batch_dict[key]
-        share_head_dict.pop('centers_features')
-        share_head_dict['gt_boxes'] = batch_dict['gt_boxes']
-        _, c, _ = radar_shared_feat.shape
-        # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
-        share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
-
-
+    #     attach_dict = self.get_transfer_feature(batch_dict)
+    #     transfer_dict = {
+    #         'att': attach_dict,
+    #         'batch': batch_dict
+    #     }
+    #     radar_shared_feat = batch_dict['radar_shared']
+    #     share_head_dict = {}
+    #     # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
+    #     for key in attach_dict.keys():
+    #         if key in batch_dict:
+    #             share_head_dict[key] = batch_dict[key]
+    #     share_head_dict.pop('centers_features')
+    #     share_head_dict['gt_boxes'] = batch_dict['gt_boxes']
+    #     _, c, _ = radar_shared_feat.shape
+    #     # print(f'RAD SHARE FEAT{radar_shared_feat.shape}')
+    #     share_head_dict['centers_features'] = radar_shared_feat.permute(0,2,1).contiguous().view(-1, c)
 
 
-        share_head_dict = self.shared_head(share_head_dict)
-        share_head_loss, shared_tb_dict = self.shared_head.get_loss(share_head_dict)
-        disp_dict = {
-            'share_det_loss': share_head_loss.item()
-        }
-        return share_head_loss, shared_tb_dict, disp_dict
+
+
+    #     share_head_dict = self.radar_head(share_head_dict)
+    #     share_head_loss, shared_tb_dict = self.radar_head.get_loss(share_head_dict)
+    #     disp_dict = {
+    #         'share_det_loss': share_head_loss.item()
+    #     }
+    #     return share_head_loss, shared_tb_dict, disp_dict
         
     
     def get_training_loss(self):

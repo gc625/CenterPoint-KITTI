@@ -872,34 +872,50 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             out_channels += mlp_spec[-1]
 
         POOL_METHOD = pool_method
-
-
-
         COMBINE_MLP = None
 
         if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(MLPS) > 0):
             shared_mlp = []
-        
+            attn_shared_mlp = []
+
             COMBINE_MLP = nn.Sequential(
                 nn.Conv1d(out_channels*2,out_channels,kernel_size=1,bias=False),
                 nn.BatchNorm1d(out_channels),
                 nn.ReLU()
             )
-        
             for k in range(len(aggregation_mlp)):
-
+                
                 # out_channels = out_channels if self.disable_cross_attn else out_channels*2
                 shared_mlp.extend([
-                    nn.Conv1d(out_channels, #! MULT 2 HERE FOR EXTRA ATTENTION FEATURE
+                    nn.Conv1d(out_channels, 
                               aggregation_mlp[k], kernel_size=1, bias=False),
                     nn.BatchNorm1d(aggregation_mlp[k]),
                     nn.ReLU()
                 ])
+                attn_shared_mlp.extend([
+                    nn.Conv1d(out_channels, 
+                              aggregation_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(aggregation_mlp[k]),
+                    nn.ReLU()
+                ])
+
                 out_channels = aggregation_mlp[k]
+
+
             AGGREGATION_LAYER = nn.Sequential(*shared_mlp).to('cuda')
+            ATTENTION_AGGREGATION_LAYER = nn.Sequential(*attn_shared_mlp).to('cuda')
+     
+            ATTENTION_GATHER_MLP = nn.Sequential(
+                nn.Conv1d(out_channels*2,out_channels,kernel_size=1,bias=False),
+                nn.BatchNorm1d(out_channels),
+                nn.ReLU()
+            ).to('cuda')
+
         else:
             AGGREGATION_LAYER = None
-
+            ATTENTION_AGGREGATION_LAYER = None
+            ATTENTION_GATHER_MLP = None
+    
         if (confidence_mlp is not None) and (len(confidence_mlp) != 0):
             shared_mlp = []
             for k in range(len(confidence_mlp)):
@@ -933,7 +949,9 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
             "POOL_METHOD":POOL_METHOD,
             'NSAMPLES': NSAMPLES,
             'COMBINE_MLP':COMBINE_MLP,
-            'RADII': radii
+            'RADII': radii,
+            'ATTENTION_AGGREGATION_LAYER': ATTENTION_AGGREGATION_LAYER,
+            'ATTENTION_GATHER_MLP': ATTENTION_GATHER_MLP
         }
 
         return ALL_MODULES 
@@ -1255,6 +1273,8 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.radar_aggregation_layer = self.RADAR_MODULES['AGGREGATION_LAYER']
         self.radar_confidence_layers = self.RADAR_MODULES['CONFIDENCE_LAYERS']
         self.radar_combine_mlp = self.RADAR_MODULES['COMBINE_MLP']
+        self.radar_attention_aggregaton_layer = self.RADAR_MODULES['ATTENTION_AGGREGATION_LAYER']
+        self.radar_attention_gather_mlp = self.RADAR_MODULES['ATTENTION_GATHER_MLP']
 
         self.lidar_sa_modules = self.LIDAR_MODULES['SA_MODULES']
         self.lidar_grouping_modules = self.LIDAR_MODULES['GROUPING_MODULES']
@@ -1262,7 +1282,8 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         self.lidar_aggregation_layer = self.LIDAR_MODULES['AGGREGATION_LAYER']
         self.lidar_confidence_layers = self.LIDAR_MODULES['CONFIDENCE_LAYERS']
         self.lidar_combine_mlp = self.LIDAR_MODULES['COMBINE_MLP']
-
+        self.lidar_attention_aggregaton_layer = self.LIDAR_MODULES['ATTENTION_AGGREGATION_LAYER']
+        self.lidar_attention_gather_mlp = self.LIDAR_MODULES['ATTENTION_GATHER_MLP']
 
 
 
@@ -1271,7 +1292,8 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 lidar_settings,
                 disable_cross_attn,
                 concat_attn_ft_dim,
-                n_heads):
+                n_heads,
+                concat_after_aggregation):
         super().__init__()
 
         assert len(radar_settings) == len(lidar_settings), "setting lengths dont match"
@@ -1288,7 +1310,9 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         
         self.nheads = n_heads
         self.build_attention_modules()
+        
 
+        self.concat_after_aggregation = concat_after_aggregation
 
         # sa_modules
         # grouping_modules
@@ -1298,19 +1322,13 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
         # 
 
     def match_clusters(self,lidar_new_xyz,radar_new_xyz):
-
-
-        
                                                                                     # selecting lidar point FOR EACH radar
         lidar_for_radar = pointnet2_utils.ball_query(self.RADAR_MODULES['RADII'][-1],1,lidar_new_xyz,radar_new_xyz)
                                                                                     # selecting radar point FOR EACH lidar
         radar_for_lidar = pointnet2_utils.ball_query(self.RADAR_MODULES['RADII'][-1],1,radar_new_xyz,lidar_new_xyz)
-        
-    
         return radar_for_lidar,lidar_for_radar
 
     def single_pool_and_aggregate(self,feature_list,pool_method,combine_layer,aggregation_layer):
-
         new_feature_list = []
         for i in range(len(feature_list)):
             features = feature_list[i]
@@ -1327,16 +1345,43 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
         final_features = torch.cat(new_feature_list,dim=1) 
 
-        if combine_layer is None:
-            raise RuntimeError("COMBINE LAYER IS NONE DURING cross attn")
+        # if combine_layer is None:
+        #     raise RuntimeError("COMBINE LAYER IS NONE DURING cross attn")
 
-
-        if self.concat_attn_ft_dim == 1:
-            final_features = combine_layer(final_features)
+        if combine_layer is not None:
+            if self.concat_attn_ft_dim == 1:
+                final_features = combine_layer(final_features)
 
         final_features = aggregation_layer(final_features)
         
         return final_features
+
+
+    def single_pool_and_aggregate_attention(self,feature_list,pool_method,aggregation_layer):
+
+        new_feature_list = []
+        for i in range(len(feature_list)):
+            features = feature_list[i]
+            if pool_method == 'max_pool':
+                new_features = F.max_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            elif pool_method == 'avg_pool':
+                new_features = F.avg_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            new_feature_list += [new_features.squeeze(-1)]
+
+        final_features = torch.cat(new_feature_list,dim=1) 
+
+        final_features = aggregation_layer(final_features)
+
+        return final_features
+
+
+
+
+
 
     def gather_cross_features(self,indices,feature_list):
 
@@ -1443,30 +1488,64 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
                 lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
                 radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
                 
-                
 
-                radar_final_features = [
-                    torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(lidar_features_for_radar_post_attn))
-                ]
+                if self.concat_after_aggregation:
+
+                    radar_cross_features = self.single_pool_and_aggregate_attention(lidar_features_for_radar_post_attn,self.RADAR_MODULES['POOL_METHOD'],self.radar_attention_aggregaton_layer)
+                    lidar_cross_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar_post_attn,self.LIDAR_MODULES['POOL_METHOD'],self.lidar_attention_aggregaton_layer)
                 
-                lidar_final_features = [
-                    torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(radar_features_for_lidar_post_attn))
-                ]
+                else:
+                    radar_final_features = [
+                        torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(lidar_features_for_radar_post_attn))
+                    ]
+                    
+                    lidar_final_features = [
+                        torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(radar_features_for_lidar_post_attn))
+                    ]
+
+
+
+
+
+                
             else:
                 lidar_final_features = lidar_gathered_features
                 radar_final_features = radar_gathered_features
 
-            radar_final_features = self.single_pool_and_aggregate(
-                radar_final_features,
-                self.RADAR_MODULES['POOL_METHOD'],
-                self.radar_combine_mlp,
-                self.radar_aggregation_layer)
 
-            lidar_final_features = self.single_pool_and_aggregate(
-                lidar_final_features,
-                self.LIDAR_MODULES['POOL_METHOD'],
-                self.lidar_combine_mlp,
-                self.lidar_aggregation_layer)
+            if self.concat_after_aggregation:
+                radar_gathered_features = self.single_pool_and_aggregate(
+                                        radar_gathered_features,
+                                        self.RADAR_MODULES['POOL_METHOD'],
+                                        None,
+                                        self.radar_aggregation_layer)
+
+                lidar_gathered_features = self.single_pool_and_aggregate(
+                                        lidar_gathered_features,
+                                        self.RADAR_MODULES['POOL_METHOD'],
+                                        None,
+                                        self.lidar_aggregation_layer)
+
+                radar_final_features = torch.concat((radar_gathered_features,radar_cross_features),dim=1)    
+                lidar_final_features = torch.concat((lidar_gathered_features,lidar_cross_features),dim=1)    
+
+                radar_final_features = self.radar_attention_gather_mlp(radar_final_features)
+                lidar_final_features = self.lidar_attention_gather_mlp(lidar_final_features)
+
+
+
+            else:
+                radar_final_features = self.single_pool_and_aggregate(
+                    radar_final_features,
+                    self.RADAR_MODULES['POOL_METHOD'],
+                    self.radar_combine_mlp,
+                    self.radar_aggregation_layer)
+
+                lidar_final_features = self.single_pool_and_aggregate(
+                    lidar_final_features,
+                    self.LIDAR_MODULES['POOL_METHOD'],
+                    self.lidar_combine_mlp,
+                    self.lidar_aggregation_layer)
 
         else:
             lidar_final_features = pointnet2_utils.gather_operation(lidar_features,lidar_sampled_idx_list)                
@@ -1500,6 +1579,648 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
 
+
+
+
+
+class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
+
+    def build_modules(self,                
+                npoint_list: List[int],
+                sample_range_list: List[int],
+                sample_type_list: List[str],
+                radii: List[float],
+                nsamples: List[int],
+                mlps: List[List[int]],                 
+                use_xyz: bool = True,
+                dilated_group=False,
+                reverse=False,
+                pool_method='max_pool',
+                sample_idx=False,
+                use_pooling_weights=False,
+                aggregation_mlp: List[int] = None,
+                confidence_mlp: List[int] = None,
+                num_class: int = 3,
+                modality: str = 'none'):
+
+        assert modality in ['radar','lidar']
+        assert len(radii) == len(nsamples) == len(mlps)
+
+        all_modules = {
+            'sa_modules': nn.ModuleList(),
+            'grouping_modules': nn.ModuleList(),
+            'mlps': nn.ModuleList(),
+            'aggregation_layer': nn.ModuleList(),
+            'confidence_layers': nn.ModuleList(),
+            'combine_mlp': nn.ModuleList(),
+            'attention_aggregaton_layer': nn.ModuleList(),
+            'attention_gather_mlp': nn.ModuleList(),
+            'pool_weights': nn.ModuleList(),
+            'nsamples' : nsamples,
+            'sample_type_list' : sample_type_list,
+            'sample_range_list' : sample_range_list,
+            'dilated_group' : dilated_group,
+            'npoint_list': npoint_list,
+            'use_pooling_weights': use_pooling_weights,
+            'reverse': reverse,
+            'sample_idx': sample_idx,
+            'pool_method':pool_method,
+            'radii': radii,
+            'skip_connection_mlp': nn.ModuleList()
+        }
+
+
+        if self.use_skip_connection:
+            all_modules['skip_connection_mlp'] = nn.Sequential(
+                nn.Conv1d(aggregation_mlp[-1]*2,aggregation_mlp[-1],kernel_size=1,bias=False),
+                nn.BatchNorm1d(aggregation_mlp[-1]),
+                nn.ReLU()
+            )
+            
+
+        out_channels = 0 
+        for i in range(len(radii)):
+            radius = radii[i]
+            nsample = nsamples[i]
+            if dilated_group:
+                if i == 0:
+                    min_radius = 0.
+                else:
+                    min_radius = radii[i-1]
+                all_modules['grouping_modules'].append(
+                    pointnet2_utils.QueryDilatedAndGroup(
+                        radius, min_radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+                if use_pooling_weights:
+                    all_modules['pool_weights'].append(PoolingWeight())
+            else:
+                all_modules['grouping_modules'].append(
+                    pointnet2_utils.QueryAndGroup(
+                        radius, nsample, use_xyz=use_xyz)
+                    if npoint_list is not None else pointnet2_utils.GroupAll(use_xyz)
+                )
+
+                if use_pooling_weights:
+                    all_modules['pool_weights'].append(PoolingWeight())
+
+
+            mlp_spec = mlps[i]
+            if use_xyz:
+                mlp_spec[0] += 3
+
+            shared_mlps = []
+            for k in range(len(mlp_spec) - 1):
+                shared_mlps.extend([
+                    nn.Conv2d(mlp_spec[k], mlp_spec[k + 1],
+                              kernel_size=1, bias=False),
+                    nn.BatchNorm2d(mlp_spec[k + 1]),
+                    nn.ReLU()
+                ])
+            all_modules['mlps'].append(nn.Sequential(*shared_mlps).to('cuda'))
+            out_channels += mlp_spec[-1]
+
+
+        all_modules['combine_mlp'] = None
+
+        if (aggregation_mlp is not None) and (len(aggregation_mlp) != 0) and (len(all_modules['mlps']) > 0):
+            shared_mlp = []
+            attn_shared_mlp = []
+
+            all_modules['combine_mlp'] = nn.Sequential(
+                nn.Conv1d(out_channels*2,out_channels,kernel_size=1,bias=False),
+                nn.BatchNorm1d(out_channels),
+                nn.ReLU()
+            )
+            for k in range(len(aggregation_mlp)):
+                
+                # out_channels = out_channels if self.disable_cross_attn else out_channels*2
+                shared_mlp.extend([
+                    nn.Conv1d(out_channels, 
+                              aggregation_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(aggregation_mlp[k]),
+                    nn.ReLU()
+                ])
+                attn_shared_mlp.extend([
+                    nn.Conv1d(out_channels, 
+                              aggregation_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(aggregation_mlp[k]),
+                    nn.ReLU()
+                ])
+
+                out_channels = aggregation_mlp[k]
+
+
+            all_modules['aggregation_layer'] = nn.Sequential(*shared_mlp).to('cuda')
+            all_modules['attention_aggregaton_layer'] = nn.Sequential(*attn_shared_mlp).to('cuda')
+     
+            all_modules['attention_gather_mlp']= nn.Sequential(
+                nn.Conv1d(out_channels*2,out_channels,kernel_size=1,bias=False),
+                nn.BatchNorm1d(out_channels),
+                nn.ReLU()
+            ).to('cuda')
+
+        else:
+            all_modules['aggregation_layer'] = None
+            all_modules['attention_aggregaton_layer'] = None
+            all_modules['attention_gather_mlp'] = None
+
+
+        if (confidence_mlp is not None) and (len(confidence_mlp) != 0):
+            shared_mlp = []
+            for k in range(len(confidence_mlp)):
+                shared_mlp.extend([
+                    nn.Conv1d(out_channels, 
+                              confidence_mlp[k], kernel_size=1, bias=False),
+                    nn.BatchNorm1d(confidence_mlp[k]),
+                    nn.ReLU()
+                ])
+                out_channels = confidence_mlp[k]
+            shared_mlp.append(
+                nn.Conv1d(out_channels, num_class, kernel_size=1, bias=True),
+            )
+            all_modules['confidence_layers'] = nn.Sequential(*shared_mlp).to('cuda')
+        else:
+            all_modules['confidence_layers'] = None
+
+        for module_name,module in all_modules.items():
+            setattr(self, f"{modality}_{module_name}", module)
+
+    def build_attention_modules(self):
+        
+        self.radarCrosslidar = nn.ModuleList()
+        self.lidarCrossradar = nn.ModuleList()
+
+        #! Assumes out MLP is same for lidar and radar
+        MLPS = self.radar_mlps
+        for i in range(len(MLPS)):
+            # dim = MLPS[i]
+            nhead = self.n_heads[i]
+            dim = MLPS[i][6].out_channels
+            self.radarCrosslidar.append(nn.MultiheadAttention(dim,nhead))
+            self.lidarCrossradar.append(nn.MultiheadAttention(dim,nhead))   
+
+
+    def match_clusters(self,lidar_new_xyz,radar_new_xyz):
+                                                                                    # selecting lidar point FOR EACH radar
+        lidar_for_radar = pointnet2_utils.ball_query(self.radar_radii[-1],1,lidar_new_xyz,radar_new_xyz)
+                                                                                    # selecting radar point FOR EACH lidar
+        radar_for_lidar = pointnet2_utils.ball_query(self.radar_radii[-1],1,radar_new_xyz,lidar_new_xyz)
+        return radar_for_lidar,lidar_for_radar
+
+
+
+
+    def single_sample_and_gather(self,
+                            modality: str,
+                            xyz: torch.Tensor, 
+                            features: torch.Tensor = None, 
+                            cls_features: torch.Tensor = None,
+                            new_xyz=None, 
+                            ctr_xyz=None,):
+
+  
+
+
+        SAMPLE_TYPE_LIST = getattr(self,f'{modality}_sample_type_list')
+        SAMPLE_RANGE_LIST = getattr(self,f'{modality}_sample_range_list')
+        NPOINT_LIST = getattr(self,f'{modality}_npoint_list')
+
+
+        new_features_list = []
+        xyz_flipped = xyz.transpose(1, 2).contiguous() 
+        sampled_idx_list = []
+        if ctr_xyz is None:
+            last_sample_end_index = 0
+            
+            for i in range(len(SAMPLE_TYPE_LIST)):
+                sample_type = SAMPLE_TYPE_LIST[i]
+                sample_range = SAMPLE_RANGE_LIST[i]
+                npoint = NPOINT_LIST[i]
+
+                if npoint <= 0:
+                    continue
+                if sample_range == -1: #全部
+                    xyz_tmp = xyz[:, last_sample_end_index:, :]
+                    feature_tmp = features.transpose(1, 2)[:, last_sample_end_index:, :].contiguous()  
+                    cls_features_tmp = cls_features[:, last_sample_end_index:, :] if cls_features is not None else None 
+                else:
+                    xyz_tmp = xyz[:, last_sample_end_index:sample_range, :].contiguous()
+                    feature_tmp = features.transpose(1, 2)[:, last_sample_end_index:sample_range, :]
+                    cls_features_tmp = cls_features[:, last_sample_end_index:sample_range, :] if cls_features is not None else None 
+                    last_sample_end_index += sample_range
+
+                if xyz_tmp.shape[1] <= npoint: # No downsampling
+                    sample_idx = torch.arange(xyz_tmp.shape[1], device=xyz_tmp.device, dtype=torch.int32) * torch.ones(xyz_tmp.shape[0], xyz_tmp.shape[1], device=xyz_tmp.device, dtype=torch.int32)
+
+                elif ('cls' in sample_type) or ('ctr' in sample_type):
+                    cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
+                    score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
+                    score_picked, sample_idx = torch.topk(score_pred, npoint, dim=-1)           
+                    sample_idx = sample_idx.int()
+
+                elif 'D-FPS' in sample_type or 'DFS' in sample_type:
+                    sample_idx = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+
+                elif 'mix' in sample_type.lower():
+                    fps_npoints = int(npoint/2)
+                    ctr_npoints = npoint - fps_npoints
+                    sample_idx_fps = pointnet2_utils.furthest_point_sample(xyz_tmp.contiguous(), npoint)
+                    # ==========
+                    cls_features_max, class_pred = cls_features_tmp.max(dim=-1)
+                    score_pred = torch.sigmoid(cls_features_max) # B,N
+                    # if self.reverse: 
+                    #     score_pred = 1 - score_pred # background sampling
+                    score_picked, sample_idx_ctr = torch.topk(score_pred, ctr_npoints, dim=-1)           
+                    sample_idx_ctr = sample_idx_ctr.int()
+                    sample_idx = torch.cat([sample_idx_fps, sample_idx_ctr], dim=-1)  # [bs, npoint * 2]
+
+                elif 'F-FPS' in sample_type or 'FFS' in sample_type:
+                    features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+                    features_for_fps_distance = self.calc_square_dist(features_SSD, features_SSD)
+                    features_for_fps_distance = features_for_fps_distance.contiguous()
+                    sample_idx = pointnet2_utils.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+
+                elif sample_type == 'FS':
+                    features_SSD = torch.cat([xyz_tmp, feature_tmp], dim=-1)
+                    features_for_fps_distance = self.calc_square_dist(features_SSD, features_SSD)
+                    features_for_fps_distance = features_for_fps_distance.contiguous()
+                    sample_idx_1 = pointnet2_utils.furthest_point_sample_with_dist(features_for_fps_distance, npoint)
+                    sample_idx_2 = pointnet2_utils.furthest_point_sample(xyz_tmp, npoint)
+                    sample_idx = torch.cat([sample_idx_1, sample_idx_2], dim=-1)  # [bs, npoint * 2]
+                elif 'Rand' in sample_type:
+                    sample_idx = torch.randperm(xyz_tmp.shape[1],device=xyz_tmp.device)[None, :npoint].int().repeat(xyz_tmp.shape[0], 1)
+                elif sample_type == 'ds_FPS' or sample_type == 'ds-FPS':
+                    part_num = 4
+                    xyz_div = []
+                    idx_div = []
+                    for i in range(len(xyz_tmp)):
+                        per_xyz = xyz_tmp[i]
+                        radii = per_xyz.norm(dim=-1) -5 
+                        storted_radii, indince = radii.sort(dim=0, descending=False)
+                        per_xyz_sorted = per_xyz[indince]
+                        per_xyz_sorted_div = per_xyz_sorted.view(part_num, -1 ,3)
+
+                        per_idx_div = indince.view(part_num,-1)
+                        xyz_div.append(per_xyz_sorted_div)
+                        idx_div.append(per_idx_div)
+                    xyz_div = torch.cat(xyz_div ,dim=0)
+                    idx_div = torch.cat(idx_div ,dim=0)
+                    idx_sampled = pointnet2_utils.furthest_point_sample(xyz_div, (npoint//part_num))
+
+                    indince_div = []
+                    for idx_sampled_per, idx_per in zip(idx_sampled, idx_div):                    
+                        indince_div.append(idx_per[idx_sampled_per.long()])
+                    index = torch.cat(indince_div, dim=-1)
+                    sample_idx = index.reshape(xyz.shape[0], npoint).int()
+
+                elif sample_type == 'ry_FPS' or sample_type == 'ry-FPS':
+                    part_num = 4
+                    xyz_div = []
+                    idx_div = []
+                    for i in range(len(xyz_tmp)):
+                        per_xyz = xyz_tmp[i]
+                        ry = torch.atan(per_xyz[:,0]/per_xyz[:,1])
+                        storted_ry, indince = ry.sort(dim=0, descending=False)
+                        per_xyz_sorted = per_xyz[indince]
+                        per_xyz_sorted_div = per_xyz_sorted.view(part_num, -1 ,3)
+
+                        per_idx_div = indince.view(part_num,-1)
+                        xyz_div.append(per_xyz_sorted_div)
+                        idx_div.append(per_idx_div)
+                    xyz_div = torch.cat(xyz_div ,dim=0)
+                    idx_div = torch.cat(idx_div ,dim=0)
+                    idx_sampled = pointnet2_utils.furthest_point_sample(xyz_div, (npoint//part_num))
+
+                    indince_div = []
+                    for idx_sampled_per, idx_per in zip(idx_sampled, idx_div):                    
+                        indince_div.append(idx_per[idx_sampled_per.long()])
+                    index = torch.cat(indince_div, dim=-1)
+
+                    sample_idx = index.reshape(xyz.shape[0], npoint).int()
+
+                sampled_idx_list.append(sample_idx)
+
+            sampled_idx_list = torch.cat(sampled_idx_list, dim=-1) 
+            new_xyz = pointnet2_utils.gather_operation(xyz_flipped, sampled_idx_list).transpose(1, 2).contiguous()
+
+        else:
+            new_xyz = ctr_xyz
+
+        return new_xyz,sampled_idx_list
+
+    def single_gather_features(self,
+                            modality,
+                            xyz,
+                            new_xyz,
+                            features,
+                            sampled_idx_list):
+        
+        
+        groupers = getattr(self,f'{modality}_grouping_modules')
+        mlps = getattr(self,f'{modality}_mlps')
+        radii = getattr(self,f'{modality}_radii')
+        nsamples = getattr(self,f'{modality}_nsamples')
+
+
+        new_features_list = []
+        # sampled_features_indices = []
+        if len(groupers) > 0:
+            for i in range(len(groupers)):
+                radius = radii[i]
+                nsample = nsamples[i]
+                
+                grouped_features = groupers[i](xyz,new_xyz,features)
+                new_features = mlps[i](grouped_features)
+                new_features_list += [new_features]
+        else:
+            print('this bit might not be working as intended')
+            raise RuntimeError('reached wrong gathering step')
+            # new_features = pointnet2_utils.gather_operation(features, sampled_idx_list)
+            # new_features_list += [new_features]
+
+        return new_features_list
+
+    def single_pool_and_aggregate(self,feature_list,pool_method,combine_layer,aggregation_layer):
+        new_feature_list = []
+        for i in range(len(feature_list)):
+            features = feature_list[i]
+            if pool_method == 'max_pool':
+                new_features = F.max_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            elif pool_method == 'avg_pool':
+                new_features = F.avg_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            new_feature_list += [new_features.squeeze(-1)]
+
+        final_features = torch.cat(new_feature_list,dim=1) 
+
+        if combine_layer is not None:
+            if self.concat_attn_ft_dim == 1:
+                final_features = combine_layer(final_features)
+
+        final_features = aggregation_layer(final_features)
+        
+        return final_features
+
+
+    def single_pool_and_aggregate_attention(self,feature_list,pool_method,aggregation_layer):
+
+        new_feature_list = []
+        for i in range(len(feature_list)):
+            features = feature_list[i]
+            if pool_method == 'max_pool':
+                new_features = F.max_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            elif pool_method == 'avg_pool':
+                new_features = F.avg_pool2d(
+                    features, kernel_size=[1, features.size(3)]
+                )  # (B, mlp[-1], npoint, 1)
+            new_feature_list += [new_features.squeeze(-1)]
+
+        final_features = torch.cat(new_feature_list,dim=1) 
+
+        final_features = aggregation_layer(final_features)
+
+        return final_features
+
+    def gather_cross_features(self,indices,feature_list):
+
+        ret_list = []
+
+        B, _ = indices.shape
+        for feature in feature_list:
+            sampled_points = []
+            for b in range(B):
+                sampled_points += [feature[b,:,indices[b].long(),:]]
+            ret_list += [torch.stack(sampled_points)]
+        return ret_list
+    
+    def single_attention(self,q_features,kv_features,attention_modules):
+
+
+        B = q_features[0].shape[0]
+
+        ret = []
+        for i in range(len(q_features)):
+            attn_list = []
+
+            for batch in range(B):
+                Q = q_features[i][batch].permute(2,1,0)
+                KV = kv_features[i][batch].permute(2,1,0)
+
+                attn, weights = attention_modules[i](Q,KV,KV)
+                
+                attn_list += [attn.permute(2,1,0)]
+            
+            ret += [torch.stack(attn_list)]
+        
+
+        return ret
+    def __init__(self, *,
+                radar_settings,
+                lidar_settings,
+                module_settings):
+        super().__init__()
+
+
+        # declaring any module settings
+        for setting_name,setting in module_settings.items():
+            setattr(self,setting_name,setting)
+
+
+        # creating SA layers for both modalities
+        self.build_modules(*radar_settings,'radar')
+        self.build_modules(*lidar_settings,'lidar')
+
+
+        # creating attention layers 
+        self.build_attention_modules()
+    
+    def forward(self,
+                lidar_xyz: torch.Tensor,
+                radar_xyz: torch.Tensor,
+                lidar_features: torch.Tensor = None,
+                lidar_cls_features: torch.Tensor = None,
+                lidar_new_xyz = None,
+                lidar_ctr_xyz = None,
+                radar_features: torch.Tensor = None,
+                radar_cls_features: torch.Tensor = None,
+                radar_new_xyz = None,
+                radar_ctr_xyz = None,    
+                ):
+
+        #@ [B,512,3]         [B,512]
+        radar_new_xyz,radar_sampled_idx_list = self.single_sample_and_gather(
+                                                        'radar',
+                                                        radar_xyz,
+                                                        radar_features,
+                                                        radar_cls_features,
+                                                        radar_new_xyz,
+                                                        radar_ctr_xyz)
+        #@ [B,4096,3]        [B,4096]
+        lidar_new_xyz,lidar_sampled_idx_list = self.single_sample_and_gather(
+                                                        'lidar',
+                                                        lidar_xyz,
+                                                        lidar_features,
+                                                        lidar_cls_features,
+                                                        lidar_new_xyz,
+                                                        lidar_ctr_xyz)
+        
+        # import numpy as np
+        # np.save('lidar_xyz',lidar_xyz.cpu().numpy())
+        # np.save('lidar_new_xyz',lidar_new_xyz.cpu().numpy())
+        # np.save('radar_xyz',radar_xyz.cpu().numpy())
+        # np.save('radar_new_xyz',radar_new_xyz.cpu().numpy())
+
+        if len(self.radar_grouping_modules) > 0:
+
+            #@ [B,4096,1]     [B,512,1]
+            radar_for_lidar,lidar_for_radar = self.match_clusters(lidar_new_xyz,radar_new_xyz)        
+
+
+            # OUTPUT IS list of num_radii tensors
+
+
+            #@ LIST[ (B,32,512,16),(B,64,512,32)]
+            radar_gathered_features = self.single_gather_features(
+                                            'radar',
+                                            xyz=radar_xyz,
+                                            new_xyz=radar_new_xyz,
+                                            features=radar_features,
+                                            sampled_idx_list = radar_sampled_idx_list)
+
+
+            #@ LIST[ (B,32,4096,16),(B,64,4096,32)]
+            lidar_gathered_features = self.single_gather_features(
+                                                'lidar',
+                                                xyz=lidar_xyz,
+                                                new_xyz=lidar_new_xyz,
+                                                features=lidar_features,
+                                                sampled_idx_list = lidar_sampled_idx_list)
+
+            assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
+
+            # 
+            if not self.disable_cross_attn:
+                # print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
+                lidar_idx = lidar_for_radar.squeeze(2)
+                radar_idx = radar_for_lidar.squeeze(2)
+
+                lidar_features_for_radar = self.gather_cross_features(lidar_idx,lidar_gathered_features)
+                radar_features_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_features)
+                # lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
+                # radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
+
+
+
+                lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
+                radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
+                
+
+                if self.concat_after_aggregation:
+
+                    radar_cross_features = self.single_pool_and_aggregate_attention(lidar_features_for_radar_post_attn,self.radar_pool_method,self.radar_attention_aggregaton_layer)
+                    lidar_cross_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar_post_attn,self.lidar_pool_method,self.lidar_attention_aggregaton_layer)
+                
+                else:
+                    radar_final_features = [
+                        torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(lidar_features_for_radar_post_attn))
+                    ]
+                    
+                    lidar_final_features = [
+                        torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(radar_features_for_lidar_post_attn))
+                    ]
+
+                if self.concat_after_aggregation:
+                    radar_gathered_features = self.single_pool_and_aggregate(
+                                            radar_gathered_features,
+                                            self.radar_pool_method,
+                                            None,
+                                            self.radar_aggregation_layer)
+
+                    lidar_gathered_features = self.single_pool_and_aggregate(
+                                            lidar_gathered_features,
+                                            self.lidar_pool_method,
+                                            None,
+                                            self.lidar_aggregation_layer)
+
+                    radar_final_features = torch.concat((radar_gathered_features,radar_cross_features),dim=1)    
+                    lidar_final_features = torch.concat((lidar_gathered_features,lidar_cross_features),dim=1)    
+
+                    radar_final_features = self.radar_attention_gather_mlp(radar_final_features)
+                    lidar_final_features = self.lidar_attention_gather_mlp(lidar_final_features)
+
+                
+                if self.use_skip_connection:
+                    lidar_final_features = torch.concat((lidar_gathered_features,lidar_final_features),dim=1)
+                    radar_final_features = torch.concat((radar_gathered_features,radar_final_features),dim=1)
+
+
+                    lidar_final_features = self.lidar_skip_connection_mlp(lidar_final_features)
+                    radar_final_features = self.lidar_skip_connection_mlp(radar_final_features)
+
+
+
+
+                
+
+            else:
+                lidar_final_features = lidar_gathered_features
+                radar_final_features = radar_gathered_features
+
+                radar_final_features = self.single_pool_and_aggregate(
+                    radar_final_features,
+                    self.radar_pool_method,
+                    self.radar_combine_mlp,
+                    self.radar_aggregation_layer)
+
+                lidar_final_features = self.single_pool_and_aggregate(
+                    lidar_final_features,
+                    self.lidar_pool_method,
+                    self.lidar_combine_mlp,
+                    self.lidar_aggregation_layer)
+
+
+
+        else:
+            lidar_final_features = pointnet2_utils.gather_operation(lidar_features,lidar_sampled_idx_list)                
+            radar_final_features = pointnet2_utils.gather_operation(radar_features,radar_sampled_idx_list)
+
+
+        if self.radar_confidence_layers is not None:
+            lidar_cls_features = self.lidar_confidence_layers(lidar_final_features).transpose(1,2)
+            radar_cls_features = self.radar_confidence_layers(radar_final_features).transpose(1,2)
+            
+        else:
+            lidar_cls_features = None
+            radar_cls_features = None
+        # lidar_feat_post_attn,radar_feat_post_attn = self.attention_and_pool(radar_gathered_features,lidar_gathered_features)
+
+
+
+
+
+
+
+        ret_dict = {
+            'lidar': (lidar_new_xyz,lidar_final_features,lidar_cls_features),
+            'radar': (radar_new_xyz,radar_final_features,radar_cls_features),
+        }
+        
+
+        return ret_dict
+
+
+        
+
+
+    
 
 
 class Vote_layer3DSSD(nn.Module):

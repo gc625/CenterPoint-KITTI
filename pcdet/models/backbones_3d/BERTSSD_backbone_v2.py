@@ -6,7 +6,7 @@ import os
 
 
 
-class BERTSSD_Backbone(nn.Module):
+class BERTSSD_Backbonev2(nn.Module):
     '''
     BERT-SSD backbone
     '''
@@ -112,7 +112,13 @@ class BERTSSD_Backbone(nn.Module):
 #                       |
 #                 (IASSD_HEAD)
 
-    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg,disable_cross_attn,concat_attn_ft_dim,nheads,concat_after_aggregation):
+    def build_MMSA_layers(self,lidar_sa_cfg,radar_sa_cfg,attention_cfg):
+
+        disable_cross_attn = attention_cfg.DISABLE_CROSS_ATTENTION,
+        concat_attn_ft_dim = attention_cfg.CONCAT_ATTN_FT_DIM,
+        concat_after_aggregation = attention_cfg.CONCAT_AFTER_AGGREGATION
+        nheads = attention_cfg.NHEADS,
+        use_skip_connection = attention_cfg.USE_SKIP_CONNECTION
 
         
         radar_npoint_list = radar_sa_cfg.NPOINT_LIST
@@ -239,14 +245,19 @@ class BERTSSD_Backbone(nn.Module):
                 ]
                 
                 
+                module_settings = {
+                    'disable_cross_attn' : disable_cross_attn[0][k],
+                    'concat_attn_ft_dim' : concat_attn_ft_dim,
+                    'n_heads' : nheads[0][k],
+                    'concat_after_aggregation' : concat_after_aggregation,
+                    'use_skip_connection': use_skip_connection[k]
+                }
+
                 self.MMSA_modules.append(
-                    pointnet2_modules.MMSAModuleMSG_WithSampling(
+                    pointnet2_modules.MMSAModuleMSG_WithSamplingv2(
                         radar_settings=radar_settings,
                         lidar_settings=lidar_settings,
-                        disable_cross_attn = disable_cross_attn,
-                        concat_attn_ft_dim = concat_attn_ft_dim,
-                        n_heads= nheads[k],
-                        concat_after_aggregation = concat_after_aggregation
+                        module_settings=module_settings
                     )
                 )
 
@@ -295,11 +306,12 @@ class BERTSSD_Backbone(nn.Module):
 
         lidar_sa_cfg,radar_sa_cfg = self.model_cfg.LIDAR_SA_CONFIG,self.model_cfg.RADAR_SA_CONFIG
         
-        self.disable_cross_attn = self.model_cfg.DISABLE_CROSS_ATTENTION
-        self.concat_attn_ft_dim = self.model_cfg.CONCAT_ATTN_FT_DIM
-        self.nheads = self.model_cfg.NHEADS
-        self.concat_after_aggregation = self.model_cfg.CONCAT_AFTER_AGGREGATION
-        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg,self.disable_cross_attn,self.concat_attn_ft_dim,self.nheads,self.concat_after_aggregation)
+        attention_cfg = self.model_cfg.ATTENTION_CONFIG
+
+
+        self.build_MMSA_layers(lidar_sa_cfg,radar_sa_cfg,attention_cfg)
+        
+        
         # lidar_SA_modules,radar_SA_modules = self.build_both_sa_layers(lidar_sa_cfg,radar_sa_cfg)
     def break_up_pc(self, pc):
         batch_idx = pc[:, 0]
@@ -385,11 +397,7 @@ class BERTSSD_Backbone(nn.Module):
 
                 lidar_encoder_coords.append(torch.cat([lidar_center_origin_batch_idx[..., None].float(),lidar_centers_origin.view(batch_size, -1, 3)],dim =-1))
                 radar_encoder_coords.append(torch.cat([radar_center_origin_batch_idx[..., None].float(),radar_centers_origin.view(batch_size, -1, 3)],dim =-1))
-                # centers = li_xyz
-                # centers_origin = xyz_select
-                # center_origin_batch_idx = batch_idx.view(batch_size, -1)[:, :centers_origin.shape[1]]
-                # encoder_coords.append(torch.cat([center_origin_batch_idx[..., None].float(),centers_origin.view(batch_size, -1, 3)],dim =-1))
-
+       
             lidar_encoder_xyz.append(lidar_li_xyz)
             radar_encoder_xyz.append(radar_li_xyz)
 

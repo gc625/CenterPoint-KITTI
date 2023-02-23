@@ -28,6 +28,14 @@ class IASSD_Backbone(nn.Module):
         self.confidence_mlps = sa_config.get('CONFIDENCE_MLPS', None)
         self.max_translate_range = sa_config.get('MAX_TRANSLATE_RANGE', None)
 
+        self.combined_point_clouds = sa_config.get('COMBINE_LIDAR_AND_RADAR',False)
+
+
+        if self.combined_point_clouds:
+            channel_out_list[0] += 2
+
+
+
         # =====================================================
         # add options in backbone configuration, a path to save 
         # intermediate features during grouping at inference

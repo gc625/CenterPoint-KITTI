@@ -29,24 +29,29 @@ LOAD_BACKBONES: True
 
 MODEL: 
     NAME: BERTSSD
+    COMBINE_RADAR_PREDS: True
     BACKBONE_3D:
-        NAME: BERTSSD_Backbone
+        NAME: BERTSSD_Backbonev2
         # * LiDAR set abstraction config
 
-        CONCAT_ATTN_FT_DIM: -1 # 1 or -1
         LIDAR_CKPT:  /workspaces/CenterPoint-KITTI/output/IA-SSD-vod-lidar/debug_new/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth
         RADAR_CKPT:  /workspaces/CenterPoint-KITTI/output/IA-SSD-vod-radar/rcs_vcomp/eval/eval_with_train/best_eval/best_epoch_checkpoint.pth
         FREEZE_LIDAR: False
         FREEZE_RADAR: False
-        NHEADS: [
+
+        ATTENTION_CONFIG:
+            DISABLE_CROSS_ATTENTION: [True,True,True,True,True,False]
+            USE_SKIP_CONNECTION: [False,False,False,False,False,True]
+            CONCAT_AFTER_AGGREGATION: True
+            CONCAT_ATTN_FT_DIM: -1 # 1 or -1
+            NHEADS: [
             [1,2], # 32 , 32
             [2,2], # 64, 64
             [4,4], # 64, 64
             [],
             [],
             [4,8] # 128,128
-        ] 
-        DISABLE_CROSS_ATTENTION: False
+            ] 
         LIDAR_SA_CONFIG:
             POINT_INPUT_FEATURES: 4
             # Sampling setting:
@@ -217,7 +222,7 @@ OPTIMIZATION:
     BATCH_SIZE_PER_GPU: 8
     NUM_EPOCHS: 100
 
-    OPTIMIZER: adam_onecycle
+    OPTIMIZER: adam
     LR: 0.0005
     WEIGHT_DECAY: 0.02
     MOMENTUM: 0.9
