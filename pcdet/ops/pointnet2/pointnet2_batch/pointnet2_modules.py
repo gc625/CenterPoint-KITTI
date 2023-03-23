@@ -1578,7 +1578,88 @@ class MMSAModuleMSG_WithSampling(_PointnetSAModuleBase):
 
 
 
+class GaussianFourierFeatureTransform(torch.nn.Module):
+    """
+    An implementation of Gaussian Fourier feature mapping.
+    "Fourier Features Let Networks Learn High Frequency Functions in Low Dimensional Domains":
+       https://arxiv.org/abs/2006.10739
+       https://people.eecs.berkeley.edu/~bmild/fourfeat/index.html
+    Given an input of size [batches, num_input_channels, width, height],
+     returns a tensor of size [batches, mapping_size*2, width, height].
+    """
 
+    def __init__(self, num_input_channels, mapping_size=256, scale=10):
+        super().__init__()
+
+        self._num_input_channels = num_input_channels
+        self._mapping_size = mapping_size
+        self._B = torch.randn((num_input_channels, mapping_size)) * scale
+
+    def forward(self, x):
+        assert x.dim() == 4, 'Expected 4D input (got {}D input)'.format(x.dim())
+
+        batches, channels, width, height = x.shape
+
+        assert channels == self._num_input_channels,\
+            "Expected input to have {} channels (got {} channels)".format(self._num_input_channels, channels)
+
+        # Make shape compatible for matmul with _B.
+        # From [B, C, W, H] to [(B*W*H), C].
+        x = x.permute(0, 2, 3, 1).reshape(batches * width * height, channels)
+
+        x = x @ self._B.to(x.device)
+
+        # From [(B*W*H), C] to [B, W, H, C]
+        x = x.view(batches, width, height, self._mapping_size)
+        # From [B, W, H, C] to [B, C, W, H]
+        x = x.permute(0, 3, 1, 2)
+
+        x = 2 * torch.pi * x
+        return torch.cat([torch.sin(x), torch.cos(x)], dim=1)
+    
+
+class TransformerEncoderLayerPreNorm(nn.Module):
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation="relu",use_xyz=False):
+
+        super().__init__()
+
+
+
+        self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
+        self.linear1 = nn.Linear(d_model, dim_feedforward)
+        self.dropout = nn.Dropout(dropout, inplace=False)
+        self.linear2 = nn.Linear(dim_feedforward, d_model) 
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model) 
+        self.dropout1 = nn.Dropout(dropout, inplace=False)
+        self.dropout2 = nn.Dropout(dropout, inplace=False)
+
+        self.activation = nn.ReLU(inplace=False)
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super().__setstate__(state)
+
+    def forward(self, src, KV, src_mask = None, src_key_padding_mask = None,q_is_qv=False):
+
+        src = self.norm1(src)
+
+        if q_is_qv:
+            src2, mask = self.self_attn(src, KV, src, attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)
+        else:
+            src2, mask = self.self_attn(src, KV, KV, attn_mask=src_mask,
+                              key_padding_mask=src_key_padding_mask)
+            
+        src = src + self.dropout1(src2)
+        
+        src = self.norm2(src)
+        src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
+        src = src + self.dropout2(src2)
+        
+        return src
 
 
 
@@ -1636,7 +1717,18 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
                 nn.BatchNorm1d(aggregation_mlp[-1]),
                 nn.ReLU()
             )
-            
+        
+
+        if self.no_attn_plain_mlp:
+            all_modules['plain_mlp'] = nn.Sequential(
+                nn.Conv1d(aggregation_mlp[-1]*2,aggregation_mlp[-1],kernel_size=1,bias=False),
+                nn.BatchNorm1d(aggregation_mlp[-1]),
+                nn.ReLU()
+           
+            )
+
+        
+
 
         out_channels = 0 
         for i in range(len(radii)):
@@ -1671,10 +1763,13 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
 
             shared_mlps = []
             for k in range(len(mlp_spec) - 1):
+                buffer = 0
+                if k == len(mlp_spec) - 2 and self.use_positional_encoding and not self.disable_cross_attn:
+                    buffer = -3 
                 shared_mlps.extend([
-                    nn.Conv2d(mlp_spec[k], mlp_spec[k + 1],
+                    nn.Conv2d(mlp_spec[k], mlp_spec[k + 1]+buffer,
                               kernel_size=1, bias=False),
-                    nn.BatchNorm2d(mlp_spec[k + 1]),
+                    nn.BatchNorm2d(mlp_spec[k + 1]+buffer),
                     nn.ReLU()
                 ])
             all_modules['mlps'].append(nn.Sequential(*shared_mlps).to('cuda'))
@@ -1750,17 +1845,48 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
         
         self.radarCrosslidar = nn.ModuleList()
         self.lidarCrossradar = nn.ModuleList()
+        self.norms1 = nn.ModuleList()
+        self.norms2 = nn.ModuleList()
+        self.activations = nn.ModuleList()
+
+        self.radarCrosslidarBlock = nn.ModuleList()        
+        self.lidarCrossradarBlock= nn.ModuleList()
 
         #! Assumes out MLP is same for lidar and radar
         MLPS = self.radar_mlps
         for i in range(len(MLPS)):
             # dim = MLPS[i]
             nhead = self.n_heads[i]
-            dim = MLPS[i][6].out_channels
+            dim = MLPS[i][6].out_channels + 3 if self.use_positional_encoding else MLPS[i][6].out_channels 
             self.radarCrosslidar.append(nn.MultiheadAttention(dim,nhead))
             self.lidarCrossradar.append(nn.MultiheadAttention(dim,nhead))   
+            self.norms1.append(nn.LayerNorm(dim))
+            self.norms2.append(nn.LayerNorm(dim))
+            # self.activations.append(nn.ReLU(inplace=True))
+
+            radar_trans = []
+            lidar_trans = []
+
+            for i in range(self.num_trans_block):
+                radar_trans.append(TransformerEncoderLayerPreNorm(
+                    dim,
+                    nhead,
+                    dim_feedforward=dim*2,
+                    use_xyz= self.use_positional_encoding
+                ))
+
+                lidar_trans.append(TransformerEncoderLayerPreNorm(
+                    dim,
+                    nhead,
+                    dim_feedforward=dim*2,
+                    use_xyz= self.use_positional_encoding
+                ))
 
 
+            
+            self.radarCrosslidarBlock.append(nn.Sequential(*radar_trans))
+            self.lidarCrossradarBlock.append(nn.Sequential(*lidar_trans))
+    
     def match_clusters(self,lidar_new_xyz,radar_new_xyz):
                                                                                     # selecting lidar point FOR EACH radar
         lidar_for_radar = pointnet2_utils.ball_query(self.radar_radii[-1],1,lidar_new_xyz,radar_new_xyz)
@@ -1926,6 +2052,44 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
 
 
         new_features_list = []
+        new_xyz_list = []
+        # sampled_features_indices = []
+        if len(groupers) > 0:
+            for i in range(len(groupers)):
+                radius = radii[i]
+                nsample = nsamples[i]
+                
+                grouped_features,grouped_xyz = groupers[i](xyz,new_xyz,features,return_grouped_coords=True)
+                new_features = mlps[i](grouped_features)
+
+                if self.use_positional_encoding and not self.disable_cross_attn:
+                    new_features = torch.concat((new_features,grouped_xyz),dim=1)
+
+                new_features_list += [new_features]
+                new_xyz_list += [grouped_xyz]
+        else:
+            print('this bit might not be working as intended')
+            raise RuntimeError('reached wrong gathering step')
+            # new_features = pointnet2_utils.gather_operation(features, sampled_idx_list)
+            # new_features_list += [new_features]
+
+        return new_features_list,new_xyz_list
+
+    def single_gather_xyz(self,
+                            modality,
+                            xyz,
+                            new_xyz,
+                            features,
+                            sampled_idx_list):
+        
+        
+        groupers = getattr(self,f'{modality}_grouping_modules')
+        mlps = getattr(self,f'{modality}_mlps')
+        radii = getattr(self,f'{modality}_radii')
+        nsamples = getattr(self,f'{modality}_nsamples')
+
+
+        new_features_list = []
         # sampled_features_indices = []
         if len(groupers) > 0:
             for i in range(len(groupers)):
@@ -1933,8 +2097,8 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
                 nsample = nsamples[i]
                 
                 grouped_features = groupers[i](xyz,new_xyz,features)
-                new_features = mlps[i](grouped_features)
-                new_features_list += [new_features]
+                # new_features = mlps[i](grouped_features)
+                new_features_list += [grouped_features]
         else:
             print('this bit might not be working as intended')
             raise RuntimeError('reached wrong gathering step')
@@ -1942,6 +2106,8 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
             # new_features_list += [new_features]
 
         return new_features_list
+
+
 
     def single_pool_and_aggregate(self,feature_list,pool_method,combine_layer,aggregation_layer):
         new_feature_list = []
@@ -2001,7 +2167,17 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
             ret_list += [torch.stack(sampled_points)]
         return ret_list
     
-    def single_attention(self,q_features,kv_features,attention_modules):
+
+    def gather_coordinates(self,idx,xyz):
+
+
+
+
+
+
+        return xyz
+
+    def single_attention(self,q_features,kv_features,attention_modules,q_is_qv=False):
 
 
         B = q_features[0].shape[0]
@@ -2011,17 +2187,32 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
             attn_list = []
 
             for batch in range(B):
-                Q = q_features[i][batch].permute(2,1,0)
+                Q =q_features[i][batch].permute(2,1,0)
                 KV = kv_features[i][batch].permute(2,1,0)
 
-                attn, weights = attention_modules[i](Q,KV,KV)
+                if self.use_trans_block:
+                    attn =  attention_modules[i](Q,KV,q_is_qv=q_is_qv) 
+                else:
+
+                    if q_is_qv:
+                        attn, weights = attention_modules[i](Q,KV,Q)
+                    else:
+                        attn, weights = attention_modules[i](Q,KV,KV) # Q,K,V
                 
+                
+
                 attn_list += [attn.permute(2,1,0)]
             
             ret += [torch.stack(attn_list)]
         
 
         return ret
+    
+
+
+
+
+    
     def __init__(self, *,
                 radar_settings,
                 lidar_settings,
@@ -2040,7 +2231,8 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
 
 
         # creating attention layers 
-        self.build_attention_modules()
+        if not self.disable_cross_attn:
+            self.build_attention_modules()
     
     def forward(self,
                 lidar_xyz: torch.Tensor,
@@ -2088,7 +2280,7 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
 
 
             #@ LIST[ (B,32,512,16),(B,64,512,32)]
-            radar_gathered_features = self.single_gather_features(
+            radar_gathered_features,radar_gathered_xyz = self.single_gather_features(
                                             'radar',
                                             xyz=radar_xyz,
                                             new_xyz=radar_new_xyz,
@@ -2097,7 +2289,7 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
 
 
             #@ LIST[ (B,32,4096,16),(B,64,4096,32)]
-            lidar_gathered_features = self.single_gather_features(
+            lidar_gathered_features,lidar_gathered_xyz = self.single_gather_features(
                                                 'lidar',
                                                 xyz=lidar_xyz,
                                                 new_xyz=lidar_new_xyz,
@@ -2107,37 +2299,99 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
             assert len(radar_gathered_features) == len(lidar_gathered_features), "gathering error"
 
             # 
-            if not self.disable_cross_attn:
-                # print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ') 
+
+            
+            if self.no_attn_plain_mlp:
                 lidar_idx = lidar_for_radar.squeeze(2)
                 radar_idx = radar_for_lidar.squeeze(2)
 
                 lidar_features_for_radar = self.gather_cross_features(lidar_idx,lidar_gathered_features)
                 radar_features_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_features)
-                # lidar_features_for_radar = [feature[:,:,lidar_idx.long(),:] for feature in lidar_gathered_features] 
-                # radar_features_for_lidar = [feature[:,:,radar_idx.long(),:] for feature in radar_gathered_features]
-
-
-
-                lidar_features_for_radar_post_attn = self.single_attention(radar_gathered_features,lidar_features_for_radar,self.radarCrosslidar)
-                radar_features_for_lidar_post_attn = self.single_attention(lidar_gathered_features,radar_features_for_lidar,self.lidarCrossradar)
                 
 
-                if self.concat_after_aggregation:
-
-                    radar_cross_features = self.single_pool_and_aggregate_attention(lidar_features_for_radar_post_attn,self.radar_pool_method,self.radar_attention_aggregaton_layer)
-                    lidar_cross_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar_post_attn,self.lidar_pool_method,self.lidar_attention_aggregaton_layer)
                 
+                lidar_gathered_features = self.single_pool_and_aggregate(
+                                            lidar_gathered_features,
+                                            self.lidar_pool_method,
+                                            None,
+                                            self.lidar_aggregation_layer)
+                
+                lidar_cross_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar,self.lidar_pool_method,self.lidar_attention_aggregaton_layer)
+                
+
+                lidar_combined_features = torch.concat((lidar_gathered_features,lidar_cross_features),dim=1)
+
+
+                lidar_final_features = self.lidar_plain_mlp(lidar_combined_features) + lidar_gathered_features
+
+            
+                radar_final_features = radar_gathered_features
+
+                radar_final_features = self.single_pool_and_aggregate(
+                    radar_final_features,
+                    self.radar_pool_method,
+                    self.radar_combine_mlp,
+                    self.radar_aggregation_layer)
+
+
+
+            elif not self.disable_cross_attn:
+                # print('FEATURE MATCHING ONLY WORKS WITH BATCHSIZE 1 ')
+
+
+                if self.disable_radar_attn:
+                    radar_idx = radar_for_lidar.squeeze(2)
+                    radar_features_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_features)
+                    radar_features_for_lidar_post_attn = self.single_attention(
+                        lidar_gathered_features,
+                        radar_features_for_lidar,
+                        self.lidarCrossradarBlock if self.use_trans_block else self.lidarCrossradar)
+
+
                 else:
-                    radar_final_features = [
-                        torch.concat((radar_gathered_features[i],lidar_features_for_radar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(lidar_features_for_radar_post_attn))
-                    ]
+                    lidar_idx = lidar_for_radar.squeeze(2)
+                    radar_idx = radar_for_lidar.squeeze(2)
+
+                    lidar_features_for_radar = self.gather_cross_features(lidar_idx,lidar_gathered_features)
+                    radar_features_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_features)
+
+
+                    # if self.use_positional_encoding:
+                    #     # lidar_xyz_for_radar = self.gather_cross_features(lidar_idx,lidar_gathered_xyz)
+                    #     # radar_xyz_for_lidar = self.gather_cross_features(radar_idx,radar_gathered_xyz)
+
+
+                    #     for i in range(len(radar_features_for_lidar)):
+                    #         radar_features_for_lidar[i] = torch.concat((radar_features_for_lidar[i],radar_xyz_for_lidar[i]),dim=1)
+                    #         lidar_features_for_radar[i] = torch.concat((lidar_features_for_radar[i],lidar_xyz_for_radar[i]),dim=1)
+
+                    #         radar_gathered_features[i]  = torch.concat((radar_gathered_features[i],radar_xyz_for_lidar[i]),dim=1)
+                    #         lidar_gathered_features[i]  = torch.concat((lidar_gathered_features[i],lidar_xyz_for_radar[i]),dim=1)
+
+
+                    lidar_features_for_radar_post_attn = self.single_attention(
+                        radar_gathered_features,
+                        lidar_features_for_radar,
+                        self.radarCrosslidarBlock if self.use_trans_block else self.radarCrosslidar,
+                        q_is_qv=self.use_selfdoc_attn)
                     
-                    lidar_final_features = [
-                        torch.concat((lidar_gathered_features[i],radar_features_for_lidar_post_attn[i]),dim=self.concat_attn_ft_dim) for i in range(len(radar_features_for_lidar_post_attn))
-                    ]
+                    
+                    radar_features_for_lidar_post_attn = self.single_attention(
+                        lidar_gathered_features,
+                        radar_features_for_lidar,
+                        self.lidarCrossradarBlock if self.use_trans_block else self.lidarCrossradar,
+                        q_is_qv=self.use_selfdoc_attn)
+                    
+
 
                 if self.concat_after_aggregation:
+                    
+                    if not self.disable_radar_attn:
+                        radar_cross_features = self.single_pool_and_aggregate_attention(lidar_features_for_radar_post_attn,self.radar_pool_method,self.radar_attention_aggregaton_layer)
+
+                    lidar_cross_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar_post_attn,self.lidar_pool_method,self.lidar_attention_aggregaton_layer)
+
+
                     radar_gathered_features = self.single_pool_and_aggregate(
                                             radar_gathered_features,
                                             self.radar_pool_method,
@@ -2150,24 +2404,70 @@ class MMSAModuleMSG_WithSamplingv2(_PointnetSAModuleBase):
                                             None,
                                             self.lidar_aggregation_layer)
 
-                    radar_final_features = torch.concat((radar_gathered_features,radar_cross_features),dim=1)    
-                    lidar_final_features = torch.concat((lidar_gathered_features,lidar_cross_features),dim=1)    
 
-                    radar_final_features = self.radar_attention_gather_mlp(radar_final_features)
+                    if not self.disable_radar_attn:
+                        radar_final_features = torch.concat((radar_gathered_features,radar_cross_features),dim=1)    
+                        radar_final_features = self.radar_attention_gather_mlp(radar_final_features)
+                    
+                    else:
+                        radar_final_features = radar_gathered_features
+
+                    lidar_final_features = torch.concat((lidar_gathered_features,lidar_cross_features),dim=1)    
                     lidar_final_features = self.lidar_attention_gather_mlp(lidar_final_features)
+
+
+                else:
+                    radar_gathered_features = self.single_pool_and_aggregate(
+                                            radar_gathered_features,
+                                            self.radar_pool_method,
+                                            None,
+                                            self.radar_aggregation_layer)
+
+                    lidar_gathered_features = self.single_pool_and_aggregate(
+                                            lidar_gathered_features,
+                                            self.lidar_pool_method,
+                                            None,
+                                            self.lidar_aggregation_layer)
+                    if self.disable_radar_attn:
+                        radar_final_features = self.single_pool_and_aggregate(
+                            radar_gathered_features,
+                            self.radar_pool_method,
+                            None,
+                            self.radar_aggregation_layer)
+                    else:    
+                        radar_final_features = self.single_pool_and_aggregate_attention(lidar_features_for_radar_post_attn,self.radar_pool_method,self.radar_attention_aggregaton_layer)
+
+                    lidar_final_features = self.single_pool_and_aggregate_attention(radar_features_for_lidar_post_attn,self.lidar_pool_method,self.lidar_attention_aggregaton_layer)
+
 
                 
                 if self.use_skip_connection:
-                    lidar_final_features = torch.concat((lidar_gathered_features,lidar_final_features),dim=1)
-                    radar_final_features = torch.concat((radar_gathered_features,radar_final_features),dim=1)
 
+                    
 
-                    lidar_final_features = self.lidar_skip_connection_mlp(lidar_final_features)
-                    radar_final_features = self.lidar_skip_connection_mlp(radar_final_features)
+                    if self.skip_connection_type == 'concat':
 
+                        lidar_final_features = torch.concat((lidar_gathered_features,lidar_final_features),dim=1)
+                        lidar_final_features = self.lidar_skip_connection_mlp(lidar_final_features)
 
+                        if not self.disable_radar_attn:
+                            radar_final_features = torch.concat((radar_gathered_features,radar_final_features),dim=1)
+                            radar_final_features = self.radar_skip_connection_mlp(radar_final_features)
 
+                        else:
+                            radar_final_features = radar_gathered_features
 
+                    elif self.skip_connection_type == 'add':
+                        
+                        lidar_final_features = lidar_gathered_features+lidar_final_features
+                        
+                        if not self.disable_radar_attn:
+                            radar_final_features = radar_gathered_features+radar_final_features
+                        else:
+                            radar_final_features = radar_gathered_features
+
+                    else:
+                        raise TypeError(f'{self.skip_connection_type} is not concat or add')
                 
 
             else:

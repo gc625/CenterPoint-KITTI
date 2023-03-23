@@ -34,7 +34,7 @@ class BERTSSD(Detector3DTemplate):
         self.radar_param_names = []
         
         self.combine_radar_preds = model_cfg.COMBINE_RADAR_PREDS
-
+        self.use_radar_loss = model_cfg.USE_RADAR_HEAD_LOSS
         # # Attach Network
         # self.attach_module_topology = ['backbone_3d']
         # self.attach_model_cfg = model_cfg.get('ATTACH_NETWORK')
@@ -115,7 +115,11 @@ class BERTSSD(Detector3DTemplate):
             # if attach_key in self.state_dict() and self.state_dict()[attach_key].shape == model_state_disk[key].shape:
             is_in = lidar_key in self.state_dict()
             shape_match = self.state_dict()[lidar_key].shape == model_state_disk[key].shape
-            if is_in and shape_match:
+            
+            if 'point_head' in key:
+                print(f'NOT UPDATED: RADAR POINT_HEAD WEIGHTS: {lidar_key}, for  {key}')
+            
+            elif is_in and shape_match:
                 
 
                 self.lidar_param_names += [lidar_key]
@@ -128,7 +132,7 @@ class BERTSSD(Detector3DTemplate):
 
                 print(f'NOT UPDATED: isin={is_in}, shape_match{shape_match}, {lidar_key} AND {key}\n shapes')
 
-        assert len(model_state_disk) == num_updated, "missed a weight"
+        # assert len(model_state_disk) == num_updated, "missed a weight"
         state_dict = self.state_dict()
         state_dict.update(update_model_state)
         self.load_state_dict(state_dict)
@@ -168,23 +172,16 @@ class BERTSSD(Detector3DTemplate):
             for name,new_name in replace_values.items():
                 if name in radar_key:
                     radar_key = radar_key.replace(name,new_name)
-            # if attach_key in self.state_dict() and self.state_dict()[attach_key].shape == model_state_disk[key].shape:
             is_in = radar_key in self.state_dict()
             shape_match = self.state_dict()[radar_key].shape == model_state_disk[key].shape
             if 'point_head' in key:
-                # radar_key = radar_key.replace('point_head','radar_point_head')
                 print(f'NOT UPDATED: RADAR POINT_HEAD WEIGHTS: {radar_key}, for  {key}')
-
             elif is_in and shape_match:
-
                 self.radar_param_names += [radar_key]
                 update_model_state[radar_key] = val
                 num_updated += 1
                 logger.info('Update weight %s -> %s: %s' % (key, radar_key, str(val.shape)))
-            
-
             else:
-
                 print(f'NOT UPDATED: isin={is_in}, shape_match{shape_match}, {radar_key} AND {key}')
 
         # assert len(model_state_disk) == num_updated, "missed a weight"
@@ -337,35 +334,54 @@ class BERTSSD(Detector3DTemplate):
 
             # get feat transfer loss
 
-            radar_head_loss, radar_head_tb_dit, disp_dict = self.get_radar_head_loss(batch_dict)
-            # transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
+            if self.use_radar_loss:
+
+                radar_head_loss, radar_head_tb_dit, disp_dict = self.get_radar_head_loss(batch_dict)
+                # transfer_loss, shared_tb_dict, transfer_disp_dict = self.get_transfer_loss(batch_dict)
+                
+                disp_dict['det_loss'] = loss.item()
+                disp_dict['radar_head'] = radar_head_loss.item()
+                # disp_dict['matching_loss'] = tb_dict['matching_loss']
+
+                
+                loss = (radar_head_loss + loss) / 2
+
             
-            
-            
-            disp_dict['det_loss'] = loss.item()
-            disp_dict['radar_head'] = radar_head_loss.item()
-            # disp_dict['matching_loss'] = tb_dict['matching_loss']
-            loss = (radar_head_loss + loss) / 2
+                
 
             tb_keys = ['center_loss_cls', 'center_loss_box', 'corner_loss_reg']
 
             ret_dict = {
                 'loss': loss,
-                'radar_head_loss': radar_head_loss
+                'radar_head_loss': radar_head_loss 
                 
-            }
+            } if self.use_radar_loss else {'loss': loss}
+            
             # disp_dict['gan_loss'] = transfer_loss.item()
             # disp_dict['tatal_loss'] = loss.item()
 
             shared_det_list = []
             det_list = []
-            for k in tb_keys:
-                shared_det_list += [radar_head_tb_dit[k]]
-                det_list += [tb_dict[k]]
-            disp_dict['radar_box_loss'] = sum(shared_det_list)
-            disp_dict['box_loss'] = sum(det_list)
-            tb_dict['radar_box_loss'] = sum(shared_det_list)
-            tb_dict['box_loss'] = sum(det_list)
+
+            
+            if self.use_radar_loss:
+
+                for k in tb_keys:
+                    shared_det_list += [radar_head_tb_dit[k]]
+                    det_list += [tb_dict[k]]
+                disp_dict['radar_box_loss'] = sum(shared_det_list)
+                disp_dict['box_loss'] = sum(det_list)
+                tb_dict['radar_box_loss'] = sum(shared_det_list)
+                tb_dict['box_loss'] = sum(det_list)
+            else:
+
+                for k in tb_keys:
+                    # shared_det_list += [radar_head_tb_dit[k]]
+                    det_list += [tb_dict[k]]
+                # disp_dict['radar_box_loss'] = sum(shared_det_list)
+                disp_dict['box_loss'] = sum(det_list)
+                # tb_dict['radar_box_loss'] = sum(shared_det_list)
+                tb_dict['box_loss'] = sum(det_list)
 
             return ret_dict, tb_dict, disp_dict
         else:

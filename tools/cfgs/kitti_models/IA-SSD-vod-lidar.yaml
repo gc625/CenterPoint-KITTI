@@ -53,8 +53,8 @@ MODEL:
 
     POINT_HEAD:
         NAME: IASSD_Head
-        CLS_FC: [256, 256]
-        REG_FC: [256, 256]
+        CLS_FC: [512, 512]
+        REG_FC: [512, 512]
         CLASS_AGNOSTIC: False
         USE_POINT_FEATURES_BEFORE_FUSION: False
         TARGET_CONFIG:

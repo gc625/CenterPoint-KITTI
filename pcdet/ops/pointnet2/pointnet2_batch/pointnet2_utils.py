@@ -238,7 +238,7 @@ class QueryAndGroup(nn.Module):
         super().__init__()
         self.radius, self.nsample, self.use_xyz = radius, nsample, use_xyz
 
-    def forward(self, xyz: torch.Tensor, new_xyz: torch.Tensor, features: torch.Tensor = None, save_abs_coord=False) -> Tuple[torch.Tensor]:
+    def forward(self, xyz: torch.Tensor, new_xyz: torch.Tensor, features: torch.Tensor = None, save_abs_coord=False,return_grouped_coords=False) -> Tuple[torch.Tensor]:
         """
         :param xyz: (B, N, 3) xyz coordinates of the features
         :param new_xyz: (B, npoint, 3) centroids
@@ -262,6 +262,9 @@ class QueryAndGroup(nn.Module):
             new_features = grouped_xyz
         if save_abs_coord:
             new_features = torch.cat([new_features, grouped_xyz_abs], dim=1)
+
+        if return_grouped_coords:
+            return new_features,grouped_xyz
         return new_features
 
 

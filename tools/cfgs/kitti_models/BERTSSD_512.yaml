@@ -30,7 +30,7 @@ LOAD_BACKBONES: True
 MODEL: 
     NAME: BERTSSD
     COMBINE_RADAR_PREDS: False
-    USE_RADAR_HEAD_LOSS: True
+    USE_RADAR_HEAD_LOSS: False
     BACKBONE_3D:
         NAME: BERTSSD_Backbonev2
         # * LiDAR set abstraction config
@@ -45,8 +45,11 @@ MODEL:
             NO_ATTN_PLAIN_MLP: [False,False,False,False,False,False]
             # transformer block 
             USE_TRANS_BLOCK: [False,False,False,False,False,True]
+            NUM_TRANS_BLOCK: 2
             # MANUAL (not pointformer)
             USE_SKIP_CONNECTION: [False,False,False,False,False,False]
+            USE_SELFDOC_ATTN: False # Q is Q and V 
+            USE_POSITIONAL_ENCODING: False # temp fix, for the last mlp we subtract 3 (509 instead of 512) so when we concat its 512 
             SKIP_CONNECTION_TYPE: 'concat'
             CONCAT_AFTER_AGGREGATION: False
             DISABLE_RADAR_ATTN: False
@@ -116,8 +119,8 @@ MODEL:
 
     POINT_HEAD:
         NAME: IASSD_Head
-        CLS_FC: [256, 256]
-        REG_FC: [256, 256]
+        CLS_FC: [512, 512]
+        REG_FC: [512, 512]
         CLASS_AGNOSTIC: False
         USE_POINT_FEATURES_BEFORE_FUSION: False
         TARGET_CONFIG:
@@ -161,11 +164,11 @@ MODEL:
             }
 
     RADAR_HEAD:
-        NUM_POINT_FEATURES: 256
+        NUM_POINT_FEATURES: 512
         POINT_HEAD:
             NAME: IASSD_Head
-            CLS_FC: [256, 256]
-            REG_FC: [256, 256]
+            CLS_FC: [512, 512]
+            REG_FC: [512, 512]
             CLASS_AGNOSTIC: False
             USE_POINT_FEATURES_BEFORE_FUSION: False
             TARGET_CONFIG:
